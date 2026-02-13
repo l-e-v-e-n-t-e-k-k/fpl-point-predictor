@@ -14,13 +14,12 @@ def safe_get(d: dict, key: str, default=None):
 def build_match_history(players_dir: Path, out_path: Path):
     if not players_dir.exists():
         raise FileNotFoundError(
-            f"Nem találom a mappát: {players_dir}. Előbb futtasd: python3 src/download_players.py"
+            f"Not found: {players_dir}. Elobb: python3 src/download_players.py"
         )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Ezek a mezők jellemzően benne vannak az FPL history sorokban.
-    # Ha valamelyik hiányzik, üresen marad (default).
+    # Ha valamelyik hianyzik, uresen marad (default).
     fields = [
         "player_id",
         "gw",
@@ -43,7 +42,7 @@ def build_match_history(players_dir: Path, out_path: Path):
         "expected_assists",
         "expected_goal_involvements",
         "expected_goals_conceded",
-        "value",     # player value (néha benne van)
+        "value",
         "was_home",
         "opponent_team",
     ]

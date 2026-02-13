@@ -13,16 +13,13 @@ BASE_URL = "https://fantasy.premierleague.com/api/element-summary/{id}/"
 def load_bootstrap() -> dict:
     if not BOOTSTRAP_PATH.exists():
         raise FileNotFoundError(
-            f"Nem találom: {BOOTSTRAP_PATH}. Előbb futtasd: python3 src/fpl_api.py"
+            f"Nincs meg: {BOOTSTRAP_PATH}. Elotte: python3 src/fpl_api.py"
         )
     return json.loads(BOOTSTRAP_PATH.read_text(encoding="utf-8"))
 
-
+# ---------- JSON letoltes es cache ----------
 def download_json(url: str, out_path: Path, ttl_hours: int = 24) -> dict:
-    """
-    Letölt egy JSON-t és elmenti fájlba.
-    Cache: ha a fájl frissebb, mint ttl_hours, akkor nem tölt újra.
-    """
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     if out_path.exists():
@@ -58,7 +55,7 @@ def fetch_player_summary(player_id: int, ttl_hours: int = 24) -> dict:
     return download_json(url, out_path, ttl_hours=ttl_hours)
 
 
-def main(n_players: int = 50, sleep_seconds: float = 0.35):
+def main(n_players: int = 817, sleep_seconds: float = 0.3):
     data = load_bootstrap()
     player_ids = [p["id"] for p in data["elements"]]
 
