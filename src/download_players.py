@@ -1,8 +1,7 @@
 import json
 import time
 from pathlib import Path
-import urllib.request as urllib_request
-import urllib.error as urllib_error
+from data_utils import download_json
 
 BOOTSTRAP_PATH = Path("data/raw/bootstrap-static.json")
 PLAYERS_DIR = Path("data/raw/players")
@@ -16,37 +15,6 @@ def load_bootstrap() -> dict:
             f"Nincs meg: {BOOTSTRAP_PATH}. Elotte: python3 src/fpl_api.py"
         )
     return json.loads(BOOTSTRAP_PATH.read_text(encoding="utf-8"))
-
-# ---------- JSON letoltes es cache ----------
-def download_json(url: str, out_path: Path, ttl_hours: int = 24) -> dict:
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if out_path.exists():
-        age_seconds = time.time() - out_path.stat().st_mtime
-        if age_seconds < ttl_hours * 3600:
-            return json.loads(out_path.read_text(encoding="utf-8"))
-
-    req = urllib_request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json",
-        },
-        method="GET",
-    )
-
-    try:
-        with urllib_request.urlopen(req, timeout=30) as resp:
-            body = resp.read()
-    except urllib_error.HTTPError:
-        raise
-    except urllib_error.URLError:
-        raise
-
-    data = json.loads(body.decode("utf-8"))
-    out_path.write_text(json.dumps(data), encoding="utf-8")
-    return data
 
 
 def fetch_player_summary(player_id: int, ttl_hours: int = 24) -> dict:
