@@ -3,29 +3,14 @@
 import csv
 from pathlib import Path
 
+from data_utils import load_rows
 from features import build_supervised
-from model import fit_linear_regression, predict_batch
+from model import LinearRegression, MeanBaseline
 
 IN_PATH = Path("data/processed/match_history.csv")
 
 
-# ---------- 1) CSV beolvasas ----------
-def load_rows(path: Path):
-    rows = []
-    with path.open("r", encoding="utf-8") as f:
-        r = csv.DictReader(f)
-
-        for row in r:
-            # fontos mezok
-            row["player_id"] = int(row["player_id"])
-            row["gw"] = int(row["gw"]) if row["gw"] not in (None, "", "None") else None
-            row["minutes"] = float(row["minutes"]) if row["minutes"] not in (None, "", "None") else 0.0
-            row["total_points"] = float(row["total_points"]) if row["total_points"] not in (None, "", "None") else 0.0
-            rows.append(row)
-
-    return rows
-
-# ---------- 2) Idosoros split (egyszeru) + ertekeles ----------
+# ---------- Idosoros split ----------
 def train_test_split_time(rows, split_gw: int):
     """
     A match_history sorokból csak a split_gw alapján vágunk:
@@ -37,12 +22,24 @@ def train_test_split_time(rows, split_gw: int):
     test_rows = [r for r in rows if r["gw"] > split_gw]
     return train_rows, test_rows
 
+# ---------- Metrics ----------
 def mae(y_true, y_pred):
     return sum(abs(a - b) for a, b in zip(y_true, y_pred)) / max(1, len(y_true))
 
 def rmse(y_true, y_pred):
     return (sum((a - b) ** 2 for a, b in zip(y_true, y_pred)) / max(1, len(y_true))) ** 0.5
+ 
+# ---------- Evaluation helper ----------
+def evaluate_model(model, X_train, y_train, X_test, y_test):
 
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    return {
+        "y_pred": y_pred,
+        "MAE": mae(y_test, y_pred),
+        "RMSE": rmse(y_test, y_pred)
+    }
 
 def main():
     rows = load_rows(IN_PATH)
@@ -62,20 +59,50 @@ def main():
         print("Tul keves adat.")
         return
 
-    w = fit_linear_regression(X_train, y_train)
-    y_pred = predict_batch(X_test, w)
+   # w = fit_linear_regression(X_train, y_train)
+   # y_pred = predict_batch(X_test, w)
 
-    print("\nWeights (bias + 4 feature):")
-    print(w)
+        # ---- Linear Regression ----
+    lr = LinearRegression()
+    lr_results = evaluate_model(lr, X_train, y_train, X_test, y_test)
 
-    print("\nMetrics:")
-    print(f"MAE : {mae(y_test, y_pred):.3f}")
-    print(f"RMSE: {rmse(y_test, y_pred):.3f}")
+    # ---- Mean Baseline ----
+    baseline = MeanBaseline()
+    baseline_results = evaluate_model(baseline, X_train, y_train, X_test, y_test)
 
+   # print("\nWeights (bias + 4 feature):")
+   # print(w)
 
-    print("\nSample predictions (true -> pred):")
+    print("\n===== Model Comparison =====")
+
+    print("\n===== LinearRegression Weights =====")
+
+    if lr.w is not None:
+        print(f"Bias (intercept): {lr.w[0]:.4f}")
+        print(f"avg_pts_last3   : {lr.w[1]:.4f}")
+        print(f"avg_min_last3   : {lr.w[2]:.4f}")
+        print(f"avg_pts_last5   : {lr.w[3]:.4f}")
+        print(f"avg_min_last5   : {lr.w[4]:.4f}")   
+
+    print(f"LinearRegression  -> MAE: {lr_results['MAE']:.3f}, RMSE: {lr_results['RMSE']:.3f}")
+    print(f"MeanBaseline      -> MAE: {baseline_results['MAE']:.3f}, RMSE: {baseline_results['RMSE']:.3f}")
+
+    improvement = baseline_results["MAE"] - lr_results["MAE"]
+    print(f"\nMAE improvement vs baseline: {improvement:.3f}")
+
+    # --------------------------------------------------
+    # Sample predictions
+    # --------------------------------------------------
+
+    print("\n===== Sample Predictions =====")
+
+    print("\nLinearRegression:")
     for i in range(min(10, len(y_test))):
-        print(f"{y_test[i]:.0f} -> {y_pred[i]:.2f}")
+        print(f"{y_test[i]:>5.0f} -> {lr_results['y_pred'][i]:>6.2f}")
+
+    print("\nMeanBaseline:")
+    for i in range(min(10, len(y_test))):
+        print(f"{y_test[i]:>5.0f} -> {baseline_results['y_pred'][i]:>6.2f}")
 
 
 if __name__ == "__main__":

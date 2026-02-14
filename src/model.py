@@ -1,5 +1,8 @@
 # src/model.py
-# ----------  Linearis regresszio (Normal equation) ----------
+
+
+# Matrix helper functions
+
 def mat_transpose(A):
     return list(map(list, zip(*A)))
 
@@ -67,20 +70,49 @@ def gauss_jordan_solve(A, b):
 
     return [M[i][n] for i in range(n)]
 
+# Linear Regression (Normal Equation)
+class LinearRegression:
 
-def fit_linear_regression(X, y):
-    # w = (X^T X)^-1 X^T y
-    Xt = mat_transpose(X)
-    XtX = mat_mul(Xt, X)               # p×p
-    Xty = mat_vec_mul(Xt, y)           # p
-    w = gauss_jordan_solve(XtX, Xty)   # p
-    return w
+    def __init__(self):
+        self.w = None
+
+    def fit(self, X, y):
+        # w = (X^T X)^-1 X^T y
+        Xt = mat_transpose(X)
+        XtX = mat_mul(Xt, X)               # p×p
+        Xty = mat_vec_mul(Xt, y)           # p
+        self.w = gauss_jordan_solve(XtX, Xty)   # p 
+
+    def predict_row(self, x):
+        if self.w is None:
+            raise ValueError("Model nincs betanítva.")
+        return sum(xj * wj for xj, wj in zip(x, self.w))
+
+    def predict(self, X):
+        if self.w is None:
+            raise ValueError("Model nincs betanítva.")
+        return [self.predict_row(x) for x in X]
 #
 # def predict(X, w):
 #   return [sum(xj * wj for xj, wj in zip(x, w)) for x in X]
 
-def predict_row(x, w):
-    return sum(xj * wj for xj, wj in zip(x, w))
+# def predict_row(x, w):
+#    return sum(xj * wj for xj, wj in zip(x, w))
 
-def predict_batch(X, w):
-    return [predict_row(x, w) for x in X]
+#  predict_batch(X, w):
+#    return [predict_row(x, w) for x in X]
+
+class MeanBaseline:
+
+    def __init__(self):
+        self.mean_value = None
+
+    def fit(self, X, y):
+        if not y:
+            raise ValueError("Ures target")
+        self.mean_value = sum(y) / len(y)
+
+    def predict(self, X):
+        if self.mean_value is None:
+            raise ValueError("Model nincs betanitva")
+        return [self.mean_value for _ in X]

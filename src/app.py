@@ -4,27 +4,27 @@ from pathlib import Path
 
 from data_utils import load_rows
 from features import build_supervised, build_nextgw_features
-from model import fit_linear_regression, predict_row
+from model import LinearRegression, MeanBaseline
 
 BOOTSTRAP_PATH = Path("data/raw/bootstrap-static.json")
 MATCH_HISTORY_PATH = Path("data/processed/match_history.csv")
 
 TOP_K = 20
+USE_BASELINE = False
 
 # Helper
 
 def pos_name(element_type: int) -> str:
-    # FPL: 1=GKP, 2=DEF, 3=MID, 4=FWD
     return {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}.get(element_type, str(element_type))
 
 
 def main():
 
     if not BOOTSTRAP_PATH.exists():
-        raise FileNotFoundError("Futtasd előbb: python3 src/fpl_api.py")
+        raise FileNotFoundError("Futtasd: python3 src/fpl_api.py")
 
     if not MATCH_HISTORY_PATH.exists():
-        raise FileNotFoundError("Futtasd előbb: python3 src/build_dataset.py")
+        raise FileNotFoundError("Futtasd: python3 src/build_dataset.py")
 
     # ---- Load metadata ----
     bootstrap = json.loads(BOOTSTRAP_PATH.read_text(encoding="utf-8"))
@@ -51,23 +51,55 @@ def main():
         print("Túl kevés adat a tanításhoz.")
         return
 
-    w = fit_linear_regression(X, y)
+    if USE_BASELINE:
+        model = MeanBaseline()
+        print("\nUsing MeanBaseline model")
+    else:
+        model = LinearRegression()
+        print("\nUsing LinearRegression model")
+
+    model.fit(X, y)
+
+     # ---- Print model info ----
+    if isinstance(model, LinearRegression):
+        print("\nModel weights:")
+        print(f"Bias: {model.w[0]:.4f}")
+        print(f"avg_pts_last3  : {model.w[1]:.4f}")
+        print(f"avg_min_last3  : {model.w[2]:.4f}")
+        print(f"avg_pts_last5  : {model.w[3]:.4f}")
+        print(f"avg_min_last5  : {model.w[4]:.4f}")
+    else:
+        print(f"\nBaseline constant prediction: {model.mean_value:.4f}")
 
     # ---- Build next GW features ----
+    # Osszegyujtjuk X-eket
     next_feats = build_nextgw_features(rows)
 
+    pids = []
+    X_next = []
     preds = []
 
     for pid, x in next_feats.items():
         if pid not in player_meta:
             continue
+        pids.append(pid)
+        X_next.append(x)
 
-        pred_pts = predict_row(x, w)
+    if not X_next:
+        print("Nincs predikálható játékos.")
+        return
+
+    # Batch predict
+    y_pred = model.predict(X_next)
+
+    # osszeparositas
+    for pid, pred_pts in zip(pids, y_pred):
         meta = player_meta[pid]
-
-        preds.append((pred_pts, meta))
+        preds.append((pred_pts, meta))  
 
     preds.sort(reverse=True, key=lambda t: t[0])
+
+    # ---- Kiiaras ----
 
     max_gw = max(r["gw"] for r in rows if r["gw"] is not None)
     next_gw = max_gw + 1
