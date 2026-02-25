@@ -36,7 +36,7 @@ def gauss_jordan_solve(A, b):
     """
     Megoldja A x = b-t Gauss–Jordan eliminacioval
     A: n×n, b: n
-    """
+    """ 
     n = len(A)
     # augmented matrix
     M = [A[i][:] + [b[i]] for i in range(n)]
@@ -53,7 +53,7 @@ def gauss_jordan_solve(A, b):
         # sorcsere
         M[col], M[pivot] = M[pivot], M[col]
 
-        # pivot sor normalizálás
+        # pivot sor normalizalas
         piv_val = M[col][col]
         for c in range(col, n + 1):
             M[col][c] /= piv_val
@@ -70,7 +70,7 @@ def gauss_jordan_solve(A, b):
 
     return [M[i][n] for i in range(n)]
 
-# Linear Regression (Normal Equation)
+# Linear Regression
 class LinearRegression:
 
     def __init__(self):
@@ -85,12 +85,12 @@ class LinearRegression:
 
     def predict_row(self, x):
         if self.w is None:
-            raise ValueError("Model nincs betanítva.")
+            raise ValueError("nincs tanitva a model")
         return sum(xj * wj for xj, wj in zip(x, self.w))
 
     def predict(self, X):
         if self.w is None:
-            raise ValueError("Model nincs betanítva.")
+            raise ValueError("nincs tanitva a model")
         return [self.predict_row(x) for x in X]
 #
 # def predict(X, w):

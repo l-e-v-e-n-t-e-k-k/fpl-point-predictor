@@ -48,7 +48,7 @@ def main():
     X, y = build_supervised(rows)
 
     if len(y) < 50:
-        print("Túl kevés adat a tanításhoz.")
+        print("Tul keves adat a tanitashoz")
         return
 
     if USE_BASELINE:
@@ -72,10 +72,11 @@ def main():
         print(f"\nBaseline constant prediction: {model.mean_value:.4f}")
 
     # ---- Build next GW features ----
-    # Osszegyujtjuk X-eket
+    # Osszegyujti az X-eket
     next_feats = build_nextgw_features(rows)
 
     pids = []
+    # feature matrix
     X_next = []
     preds = []
 
@@ -86,7 +87,7 @@ def main():
         X_next.append(x)
 
     if not X_next:
-        print("Nincs predikálható játékos.")
+        print("Nincs predikalhato jatekos")
         return
 
     # Batch predict

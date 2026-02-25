@@ -20,10 +20,10 @@ def build_supervised(rows):
     y = []
 
     for pid, games in by_player.items():
-        # gw szerint rendezés
+        # gw szerint rendezes
         games.sort(key=lambda r: r["gw"])
 
-        # csak a minutes & points sorozat kell
+        # csak a minutes es points sorozat kell
         pts = [g["total_points"] for g in games]
         mins = [g["minutes"] for g in games]
 
@@ -32,12 +32,12 @@ def build_supervised(rows):
             # target: aktualis gw pontja (t)
             target = pts[t]
 
-            # feature ablakok az előző meccsekből
+            # feature ablakok az elozo meccsekbol
             prev_pts = pts[:t]
             prev_mins = mins[:t]
 
             if len(prev_pts) < MIN_MATCHES_REQUIRED:
-                # baseline-hoz kerunk legalabb 5 multbeli meccset
+                # baseline-hoz legalabb 5 multbeli meccs
                 continue
             if mean(prev_mins[-5:]) < MIN_AVG_MIN_LAST5:
                 continue

@@ -1,3 +1,4 @@
+#build_dataset.py
 import csv
 import json
 from pathlib import Path
@@ -19,7 +20,7 @@ def build_match_history(players_dir: Path, out_path: Path):
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Ha valamelyik hianyzik, uresen marad (default).
+    # Ha valamelyik hianyzik uresen marad (default)
     fields = [
         "player_id",
         "gw",
@@ -49,7 +50,7 @@ def build_match_history(players_dir: Path, out_path: Path):
 
     player_files = sorted(players_dir.glob("*.json"))
     if not player_files:
-        raise FileNotFoundError(f"Nincs egyetlen JSON sem itt: {players_dir}")
+        raise FileNotFoundError(f"Nincs JSON: {players_dir}")
 
     rows = 0
 

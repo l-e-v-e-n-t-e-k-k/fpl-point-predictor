@@ -1,3 +1,4 @@
+#download_players.py
 import json
 import time
 from pathlib import Path
@@ -23,7 +24,7 @@ def fetch_player_summary(player_id: int, ttl_hours: int = 24) -> dict:
     return download_json(url, out_path, ttl_hours=ttl_hours)
 
 
-def main(n_players: int = 817, sleep_seconds: float = 0.3):
+def main(n_players: int = 817, sleep_seconds: float = 0.0000000000003):
     data = load_bootstrap()
     player_ids = [p["id"] for p in data["elements"]]
 
@@ -41,7 +42,7 @@ def main(n_players: int = 817, sleep_seconds: float = 0.3):
             failed += 1
             print(f"[{i}/{n_players}] FAIL player_id={pid} -> {type(e).__name__}: {e}")
 
-        time.sleep(sleep_seconds)  # rate limit
+        time.sleep(sleep_seconds) 
 
     print(f"\nDone. OK={ok}, FAIL={failed}")
     print(f"Saved to: {PLAYERS_DIR.resolve()}")
