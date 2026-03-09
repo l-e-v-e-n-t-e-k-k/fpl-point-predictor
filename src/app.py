@@ -1,30 +1,30 @@
 
 import json
 from pathlib import Path
+import joblib
 
-from data_utils import load_rows
-from features import build_supervised, build_nextgw_features
-from model import LinearRegression, MeanBaseline
+from features import build_nextgw_features
 
 BOOTSTRAP_PATH = Path("data/raw/bootstrap-static.json")
-MATCH_HISTORY_PATH = Path("data/processed/match_history.csv")
+MATCH_HISTORY_PATH = Path("data/processed/multiseason_supervised.csv")
+
+MODEL_PATH = Path("models/production_model.joblib")
+SCALER_PATH = Path("models/scaler.joblib")
 
 TOP_K = 20
-USE_BASELINE = False
 
-# Helper
-
+# ---- Helper ----
 def pos_name(element_type: int) -> str:
     return {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}.get(element_type, str(element_type))
 
 
 def main():
+    # ---- Load model ----
+    model = joblib.load(MODEL_PATH)
 
-    if not BOOTSTRAP_PATH.exists():
-        raise FileNotFoundError("Futtasd: python3 src/fpl_api.py")
-
-    if not MATCH_HISTORY_PATH.exists():
-        raise FileNotFoundError("Futtasd: python3 src/build_dataset.py")
+    scaler = None
+    if SCALER_PATH.exists():
+        scaler = joblib.load(SCALER_PATH)
 
     # ---- Load metadata ----
     bootstrap = json.loads(BOOTSTRAP_PATH.read_text(encoding="utf-8"))
@@ -34,6 +34,7 @@ def main():
     player_meta = {}
     for e in elements:
         pid = int(e["id"])
+
         player_meta[pid] = {
             "name": e.get("web_name") or "",
             "team": teams.get(int(e.get("team", 0)), "Unknown"),
@@ -43,33 +44,6 @@ def main():
 
     # ---- Load match history ----
     rows = load_rows(MATCH_HISTORY_PATH)
-
-    # ---- Train model ----
-    X, y = build_supervised(rows)
-
-    if len(y) < 50:
-        print("Tul keves adat a tanitashoz")
-        return
-
-    if USE_BASELINE:
-        model = MeanBaseline()
-        print("\nUsing MeanBaseline model")
-    else:
-        model = LinearRegression()
-        print("\nUsing LinearRegression model")
-
-    model.fit(X, y)
-
-     # ---- Print model info ----
-    if isinstance(model, LinearRegression):
-        print("\nModel weights:")
-        print(f"Bias: {model.w[0]:.4f}")
-        print(f"avg_pts_last3  : {model.w[1]:.4f}")
-        print(f"avg_min_last3  : {model.w[2]:.4f}")
-        print(f"avg_pts_last5  : {model.w[3]:.4f}")
-        print(f"avg_min_last5  : {model.w[4]:.4f}")
-    else:
-        print(f"\nBaseline constant prediction: {model.mean_value:.4f}")
 
     # ---- Build next GW features ----
     # Osszegyujti az X-eket

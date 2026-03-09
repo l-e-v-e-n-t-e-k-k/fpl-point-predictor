@@ -9,10 +9,7 @@ S2 – Data Transformation Service
 build_dataset_pandas.py
 merge_difficulty.py
 add_target.py
-align_current_season.py
 build_dataset_multiseason.py
-clean_multiseason.py
-build_final_dataset.py
 
 S3 – Model Service
 
@@ -25,56 +22,73 @@ S4 – Application Service
 app.py
 
 1 Ingestion Service (stateless)
+Típus: Stateless microservice
+Kubernetes objektum: Deployment
 
-        API hívás
+        Felelősség:
 
-       // adat mentés DB-be
+                Kulso FPL API lekerdezese HTTPS-en
 
-        Kubernetes Deployment
+                Nyers JSON/CSV adat validálása
 
-        horizontálisan skálázható
+                Raw adat perzisztálása megosztott tárolóra (PVC vagy objektumtár)
 
 2 Transformation Service (batch job)
+Típus: Batch microservice
+Kubernetes objektum: CronJob
 
-        Raw → structured
+        Felelősség:
 
-        futtatható CronJob-ként
+                Raw adatok beolvasasa
 
-        adatbázisba ír
+                Strukturalt adatta alakitas
+
+                Target változó generalas
+
+                Strukturalt adatok betoltese PostgreSQL adatbazisba
 
 3 Model Service (stateless)
+Típus: Stateless compute microservice
+Kubernetes objektum: Deployment (+ opcionálisan HPA)
 
-        DB-ből olvas
+        Felelősség:
 
-        betölti a modellt
+                Modell betoltese indulaskor
 
-        predikció generál
+                Feature adatok lekérdezése DB-ből
 
-        FastAPI
+                Rolling feature-ok keszitese
 
-        /predict
+                Predikció generálása
 
-        /health
+                REST API endpoint biztosítása
 
 4 Application / API Service
+Típus: Public API gateway microservice
+Kubernetes objektum: Deployment + Service + Ingress
 
-        FastAPI
+        Felelősség:
 
-        külső endpoint
+                HTTP keresek fogadasa
 
-        UI / public API
+                Request validacio
 
-        S3-at hívja REST-en keresztül
+                Model Service hivasa
+
+                Response aggregalasa
 
 5 Database (stateful)
+        Típus: Stateful komponens
+        Kubernetes objektum: StatefulSet + PVC
 
-        PostgreSQL
+        Felelősség:
 
-        StatefulSet
+                Strukturalt dataset tarolasa
 
-        PersistentVolume
+                final_dataset tabla biztositasa
 
-        PersistentVolumeClaim
+                Indexelt lekerdezések tamogatasa
+
 
                           ┌──────────────────────┐
                           │   External FPL API   │
@@ -89,7 +103,7 @@ app.py
                 └───────────┬────────────────────┘
                             │ file write (JSON/CSV)
                             ▼
-                       raw data files
+                       raw data files ( PVC )
                             │
                             ▼
                 ┌────────────────────────────────┐
@@ -123,30 +137,19 @@ app.py
 
 Namespace: fpl-system
 
-Deployments:
-  ingestion-deployment
-  model-deployment
-  api-deployment
+Service	        K8s Object	        Skálázás
+S1	        Deployment	        horizontális
+S2	        CronJob	                batch
+Postgres        StatefulSet	        nem skálázott
+S3	        Deployment + HPA	horizontális
+S4	        Deployment	        opcionális
 
-StatefulSet:
-  postgres
-
-PVC:
-  postgres-pvc
-
-Services:
-  postgres-service
-  api-service
 
 TRANFORMATION PIPELINE: 
 --------------------------
-1. download_players.py
-2. build_dataset_pandas
-3. merge_difficulty
-4. add_target
-5. align_current_season
-+++++++++++++++++++++++
-1. build_dataset_multiseason
-2. clean_multiseason
+0. download_players.py
+1. build_dataset_pandas
+2. merge_difficulty
+3. add_target
+4. build_dataset_multiseason
 =====================
-build_final_dataset

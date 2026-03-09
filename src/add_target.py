@@ -5,14 +5,14 @@ INPUT_PATH = Path("data/processed/current_season_with_difficulty.csv")
 OUT_PATH = Path("data/processed/current_season_supervised.csv")
 
 
-def main():
+def add_target():
 
     df = pd.read_csv(INPUT_PATH)
 
-    df = df.sort_values(["player_id", "gw"])
+    df = df.sort_values(["name", "GW"])
 
     df["target_next_gw"] = (
-        df.groupby("player_id")["total_points"]
+        df.groupby("name")["total_points"]
         .shift(-1)
     )
 
@@ -26,4 +26,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    add_target()

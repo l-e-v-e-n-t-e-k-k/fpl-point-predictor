@@ -42,7 +42,7 @@ def main():
         df["team_h_difficulty"]
     )
 
-    df = df.drop(columns=["id", "team_h_difficulty", "team_a_difficulty"])
+    df = df.drop(columns=["id", "team_h_difficulty", "team_a_difficulty", "was_home", "fixture", "opponent_team"])
 
     df.to_csv(OUT_PATH, index=False)
 
