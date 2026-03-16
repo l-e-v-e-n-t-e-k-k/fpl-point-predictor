@@ -1,5 +1,7 @@
 # fpl-points-predictor
 PostreSQL - docker exec -it fpl_postgres psql -U mluser -d fpldb
+S4 - docker build -t fpl-s4 -f src/S4/Dockerfile .
+        
 S1 – Data Ingestion
 
 fpl_api.py

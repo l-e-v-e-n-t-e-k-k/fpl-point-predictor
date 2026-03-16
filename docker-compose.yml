@@ -13,6 +13,18 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+  api:
+    build:
+      context: .
+      dockerfile: src/S4/Dockerfile
+    container_name: fpl-api
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://mluser:mlpass@postgres:5432/fpldb
 
 volumes:
   postgres_data:
