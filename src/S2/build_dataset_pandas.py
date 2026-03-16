@@ -1,6 +1,5 @@
 #build_dataset_pandas.py
 # Build dataset for the current season, using the raw JSON files downloaded from the FPL API.
-
 import json
 from pathlib import Path
 import pandas as pd
@@ -18,6 +17,7 @@ def build_current_season(players_dir: Path, out_path: Path):
     elements = bootstrap["elements"]
 
     meta_rows = []
+    # for merging player metadata (name, position) later with the match history data
     for e in elements:
         meta_rows.append({
             "player_id": e["id"],
@@ -117,6 +117,8 @@ def build_current_season(players_dir: Path, out_path: Path):
 
     print(f"OK: wrote {len(df)} rows to {out_path}")
 
+def main():
+        build_current_season(PLAYERS_DIR, OUT_PATH)
 
 if __name__ == "__main__":
-    build_current_season(PLAYERS_DIR, OUT_PATH)
+    main()

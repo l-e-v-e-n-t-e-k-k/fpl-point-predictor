@@ -16,14 +16,13 @@ def add_target():
         .shift(-1)
     )
 
-    # Utolso GW sorok eldobasa
-    df = df.dropna(subset=["target_next_gw"])
-
     df.to_csv(OUT_PATH, index=False)
 
     print("OK: target column added")
     print("Final rows:", len(df))
 
+def main():
+        add_target()
 
 if __name__ == "__main__":
-    add_target()
+    main()

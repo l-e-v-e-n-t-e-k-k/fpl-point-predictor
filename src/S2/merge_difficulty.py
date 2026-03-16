@@ -28,21 +28,21 @@ def main():
         how="left"
     )
 
-    # Sajat csapat difficulty
+    # Own team difficulty
     df["team_difficulty"] = np.where(
         df["was_home"] == True,
         df["team_h_difficulty"],
         df["team_a_difficulty"]
     )
 
-    # Ellenfel difficulty
+    # Opponent difficulty
     df["opponent_difficulty"] = np.where(
         df["was_home"] == True,
         df["team_a_difficulty"],
         df["team_h_difficulty"]
     )
 
-    df = df.drop(columns=["id", "team_h_difficulty", "team_a_difficulty", "was_home", "fixture", "opponent_team"])
+    df = df.drop(columns=["id", "team_h_difficulty", "team_a_difficulty", "fixture", "opponent_team"])
 
     df.to_csv(OUT_PATH, index=False)
 

@@ -2,7 +2,7 @@
 import json
 import time
 from pathlib import Path
-from data_utils import download_json
+from S1.data_utils import download_json
 
 BOOTSTRAP_PATH = Path("data/raw/bootstrap-static.json")
 PLAYERS_DIR = Path("data/raw/players")
@@ -24,9 +24,10 @@ def fetch_player_summary(player_id: int, ttl_hours: int = 24) -> dict:
     return download_json(url, out_path, ttl_hours=ttl_hours)
 
 
-def main(n_players: int = 817, sleep_seconds: float = 0.0000000000003):
+def main(sleep_seconds: float = 0.0000000000003):
     data = load_bootstrap()
     player_ids = [p["id"] for p in data["elements"]]
+    n_players = len(player_ids)
 
     subset = player_ids[:n_players]
 

@@ -1,6 +1,6 @@
 #fpl_api.py
 from pathlib import Path
-from data_utils import download_json
+from S1.data_utils import download_json
 
 BOOTSTRAP_URL = "https://fantasy.premierleague.com/api/bootstrap-static/"
 FIXTURES_URL = "https://fantasy.premierleague.com/api/fixtures/"
@@ -20,9 +20,12 @@ def fetch_fixtures():
         ttl_hours=12
     )
 
+def main():
+        data = fetch_bootstrap_static()
+        fixtures = fetch_fixtures()
+        print("Keys:", list(data.keys()))
+        print("Players:", len(data["elements"]))
+        print("Teams:", len(data["teams"]))
+
 if __name__ == "__main__":
-    data = fetch_bootstrap_static()
-    fixtures = fetch_fixtures()
-    print("Keys:", list(data.keys()))
-    print("Players:", len(data["elements"]))
-    print("Teams:", len(data["teams"]))
+    main()

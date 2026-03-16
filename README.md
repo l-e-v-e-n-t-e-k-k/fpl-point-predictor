@@ -1,4 +1,5 @@
 # fpl-points-predictor
+PostreSQL - docker exec -it fpl_postgres psql -U mluser -d fpldb
 S1 – Data Ingestion
 
 fpl_api.py
@@ -147,9 +148,17 @@ S4	        Deployment	        opcionális
 
 TRANFORMATION PIPELINE: 
 --------------------------
-0. download_players.py
 1. build_dataset_pandas
 2. merge_difficulty
 3. add_target
 4. build_dataset_multiseason
 =====================
+
+## Running scripts
+
+The project uses the `src` directory as the Python module root.
+
+Before running scripts locally, set the `PYTHONPATH`:
+
+```bash
+export PYTHONPATH=src

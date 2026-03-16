@@ -1,19 +1,18 @@
 # src/train_and_evaluate.py
 from pathlib import Path
 
-from features import add_rolling_features
-
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
 from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from db.connection import engine
 
 import joblib
 
 import pandas as pd
 
-IN_PATH = Path("data/processed/multiseason_supervised.csv")
+# IN_PATH = Path("data/processed/multiseason_supervised.csv")
 
 FEATURE_COLS = [
     "avg_pts_last3",
@@ -22,6 +21,8 @@ FEATURE_COLS = [
     "avg_min_last5",
     "expected_goals",
     "expected_assists",
+    "avg_xgi_last5",
+    "is_home",
     "expected_goals_conceded",
     "bps",
     "team_difficulty",
@@ -89,9 +90,16 @@ def evaluate_model(model, X_train, y_train, X_test, y_test):
 
 def main():
 
-    df = pd.read_csv(IN_PATH)
+   # df = pd.read_csv(IN_PATH)
 
-    df = add_rolling_features(df)
+    df = pd.read_sql(
+        "SELECT * FROM player_data",
+        engine
+    )   
+    # ---- last gameweek drop ----
+    df = df.dropna(subset=["target_next_gw"])
+    
+  #  df = add_rolling_features(df)
 
     #df_model = df.dropna(subset=["avg_pts_last5"])
     #df_model = df_model[df_model["avg_min_last5"] >= 0.0]
