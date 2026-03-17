@@ -6,7 +6,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from db.connection import engine
+from shared.db.connection import engine
 
 import joblib
 

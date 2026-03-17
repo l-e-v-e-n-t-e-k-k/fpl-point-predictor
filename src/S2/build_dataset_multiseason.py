@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from features import add_rolling_features
 from pathlib import Path
-from db.connection import engine
+from shared.db.connection import engine
 
 RAW_DIR = Path("data/raw/prev_seasons")
 PROCESSED_DIR = Path("data/processed")

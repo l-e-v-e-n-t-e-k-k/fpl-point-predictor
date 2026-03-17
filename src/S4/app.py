@@ -4,7 +4,7 @@ import joblib
 import pandas as pd
 
 from pathlib import Path
-from db.connection import engine
+from shared.db.connection import engine
 from S3.train_and_evaluate import FEATURE_COLS
 
 BOOTSTRAP_PATH = Path("data/raw/bootstrap-static.json")

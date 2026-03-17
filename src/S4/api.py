@@ -4,7 +4,7 @@ import pandas as pd
 
 from pathlib import Path
 from fastapi import FastAPI
-from db.connection import engine
+from shared.db.connection import engine
 from S3.train_and_evaluate import FEATURE_COLS
 
 app = FastAPI()

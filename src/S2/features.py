@@ -43,6 +43,6 @@ def add_rolling_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- Filter ---
     df = df[df["avg_pts_last5"].notna()]
-    df = df[df["avg_min_last5"] >= MIN_AVG_MIN_LAST5]
+   # df = df[df["avg_min_last5"] >= MIN_AVG_MIN_LAST5]
 
     return df
