@@ -1,72 +1,48 @@
 #build_dataset_pandas.py
 # Build dataset for the current season, using the raw JSON files downloaded from the FPL API.
-import json
 from pathlib import Path
 import pandas as pd
+from shared.db.connection import engine
 
-PLAYERS_DIR = Path("data/raw/players")
+
 BOOTSTRAP_PATH = Path("data/raw/bootstrap-static.json")
 OUT_PATH = Path("data/processed/current_season_raw.csv")
 
 SEASON = "25-26"
 
 
-def build_current_season(players_dir: Path, out_path: Path):
+def build_current_season(out_path: Path):
+    query = """
+    SELECT
+        ph.player_id,
+        ph.round AS "GW",
+        ph.minutes,
+        ph.total_points,
+        ph.clean_sheets,
+        ph.bps,
+        ph.saves,
+        ph.expected_goals,
+        ph.expected_assists,
+        ph.expected_goals_conceded,
+        ph.value,
+        ph.was_home,
+        ph.opponent_team,
+        ph.fixture,
 
-    bootstrap = json.loads(BOOTSTRAP_PATH.read_text(encoding="utf-8"))
-    elements = bootstrap["elements"]
+        CONCAT(p.first_name, ' ', p.second_name) AS name,
+        CASE
+            WHEN p.element_type = 1 THEN 'GKP'
+            WHEN p.element_type = 2 THEN 'DEF'
+            WHEN p.element_type = 3 THEN 'MID'
+            WHEN p.element_type = 4 THEN 'FWD'
+        END AS position
+    FROM raw.player_history ph
+    JOIN raw.players p
+        ON ph.player_id = p.id
+    ORDER BY ph.player_id, ph.round, ph.fixture
+    """
 
-    meta_rows = []
-    # for merging player metadata (name, position) later with the match history data
-    for e in elements:
-        meta_rows.append({
-            "player_id": e["id"],
-            "name": f"{e['first_name']} {e['second_name']}",
-            "position": {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}[e["element_type"]],
-        })
-
-    meta_df = pd.DataFrame(meta_rows)
-
-    rows = []
-
-    player_files = sorted(players_dir.glob("*.json"))
-
-    for pf in player_files:
-        player_id = int(pf.stem)
-        data = json.loads(pf.read_text(encoding="utf-8"))
-
-        history = data.get("history", [])
-
-        for h in history:
-            rows.append({
-                "player_id": player_id,
-                "GW": h.get("round"),
-                "minutes": h.get("minutes"),
-                "total_points": h.get("total_points"),
-              #   "goals_scored": h.get("goals_scored"),
-              #   "assists": h.get("assists"),
-                "clean_sheets": h.get("clean_sheets"),
-              #   "goals_conceded": h.get("goals_conceded"),
-              #   "bonus": h.get("bonus"),
-                "bps": h.get("bps"),
-                "saves": h.get("saves"), 
-              #    "influence": h.get("influence"),
-              #   "creativity": h.get("creativity"),
-              #   "threat": h.get("threat"),
-              #   "ict_index": h.get("ict_index"),
-                "expected_goals": h.get("expected_goals"),
-                "expected_assists": h.get("expected_assists"),
-               # "expected_goal_involvements": h.get("expected_goal_involvements"),
-                "expected_goals_conceded": h.get("expected_goals_conceded"),
-                "value": h.get("value"),
-                "was_home": h.get("was_home"),
-                "opponent_team": h.get("opponent_team"),
-                "fixture": h.get("fixture"),
-            })
-
-    df = pd.DataFrame(rows)
-
-    df = df.merge(meta_df, on="player_id", how="left")
+    df = pd.read_sql(query, engine)
 
     df["season"] = SEASON
 
@@ -84,13 +60,15 @@ def build_current_season(players_dir: Path, out_path: Path):
         "expected_assists",
        # "expected_goal_involvements",
         "expected_goals_conceded",
-        "value"
+        "value",
+        "opponent_team",
+        "fixture",
     ]
 
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    df = df.sort_values(["player_id", "GW"])
+    df = df.sort_values(["player_id", "GW", "fixture"])
 
     final_cols = [
         "season",
@@ -118,7 +96,7 @@ def build_current_season(players_dir: Path, out_path: Path):
     print(f"OK: wrote {len(df)} rows to {out_path}")
 
 def main():
-        build_current_season(PLAYERS_DIR, OUT_PATH)
+        build_current_season(OUT_PATH)
 
 if __name__ == "__main__":
     main()
