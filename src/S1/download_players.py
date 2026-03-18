@@ -24,7 +24,7 @@ def fetch_player_summary(player_id: int, ttl_hours: int = 24) -> dict:
     return download_json(url, out_path, ttl_hours=ttl_hours)
 
 
-def main(sleep_seconds: float = 0.0000000000003):
+def main(sleep_seconds: float = 0.0000000000000003):
     data = load_bootstrap()
     player_ids = [p["id"] for p in data["elements"]]
     n_players = len(player_ids)

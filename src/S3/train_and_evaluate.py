@@ -22,11 +22,11 @@ FEATURE_COLS = [
     "expected_goals",
     "expected_assists",
     "avg_xgi_last5",
-    "is_home",
     "expected_goals_conceded",
+    "clean_sheets_last5",
     "bps",
-    "team_difficulty",
-    "opponent_difficulty"
+    "next_team_difficulty",
+    "next_opponent_difficulty"
 ]
 
 TARGET_COL = "target_next_gw"
@@ -97,8 +97,8 @@ def main():
         engine
     )   
     # ---- last gameweek drop ----
-    df = df.dropna(subset=["target_next_gw"])
-    
+    df = df.dropna(subset=["target_next_gw", "next_opponent_difficulty"])
+
   #  df = add_rolling_features(df)
 
     #df_model = df.dropna(subset=["avg_pts_last5"])
@@ -106,7 +106,7 @@ def main():
 
     train_df, test_df = rolling_gw_split(df, split_ratio=0.7)
 
-    X_train = train_df[FEATURE_COLS]   # .values.tolist() numpy array -> list of lists
+    X_train = train_df[FEATURE_COLS]   # .values.tolist() numpy array
     y_train = train_df[TARGET_COL]
     
     X_test = test_df[FEATURE_COLS]

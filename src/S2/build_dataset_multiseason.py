@@ -137,7 +137,7 @@ def main():
     final_df.to_sql(
         "player_data",
         engine,
-        if_exists="append",
+        if_exists="replace",
         index=False
     )
     
