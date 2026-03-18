@@ -1,4 +1,3 @@
-import json
 import joblib
 import pandas as pd
 
@@ -9,7 +8,6 @@ from S3.train_and_evaluate import FEATURE_COLS
 
 app = FastAPI()
 
-BOOTSTRAP_PATH = Path("data/raw/bootstrap-static.json")
 MODEL_PATH = Path("models/production_model.joblib")
 SCALER_PATH = Path("models/scaler.joblib")
 
@@ -31,6 +29,40 @@ def pos_name(element_type: int) -> str:
     return {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}.get(element_type, str(element_type))
 
 
+def load_player_meta() -> dict:
+    meta_df = pd.read_sql(
+        """
+        SELECT
+            p.first_name,
+            p.second_name,
+            p.web_name,
+            p.element_type,
+            p.now_cost,
+            t.name AS team_name
+        FROM raw.players p
+        LEFT JOIN raw.teams t
+            ON p.team = t.id
+        """,
+        engine
+    )
+
+    meta = {}
+
+    for row in meta_df.itertuples(index=False):
+        full_name = f"{row.first_name} {row.second_name}".strip()
+        key = normalize_name(full_name)
+
+        meta[key] = {
+            "name": full_name,
+            "web_name": row.web_name,
+            "team": row.team_name or "Unknown",
+            "pos": pos_name(int(row.element_type)),
+            "price": float(row.now_cost or 0) / 10.0,
+        }
+
+    return meta
+
+
 # ---- startup ----
 @app.on_event("startup")
 def load_model():
@@ -40,28 +72,7 @@ def load_model():
     model = joblib.load(MODEL_PATH)
     scaler = joblib.load(SCALER_PATH)
 
-    bootstrap = json.loads(BOOTSTRAP_PATH.read_text(encoding="utf-8"))
-
-    elements = bootstrap.get("elements", [])
-    teams = {t["id"]: t["name"] for t in bootstrap.get("teams", [])}
-
-    for e in elements:
-
-        first = e.get("first_name", "")
-        second = e.get("second_name", "")
-        web = e.get("web_name", "")
-
-        full_name = f"{first} {second}".strip()
-
-        key = normalize_name(full_name)
-
-        player_meta[key] = {
-            "name": full_name,
-            "web_name": web,
-            "team": teams.get(int(e.get("team", 0)), "Unknown"),
-            "pos": pos_name(int(e.get("element_type", 0))),
-            "price": float(e.get("now_cost", 0)) / 10.0,
-        }
+    player_meta = load_player_meta()
 
     print("Model loaded")
 

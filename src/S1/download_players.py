@@ -1,29 +1,20 @@
 #download_players.py
-import json
 import time
-from pathlib import Path
 from S1.data_utils import download_json
 from shared.db.connection import engine
 import pandas as pd
 
-BOOTSTRAP_PATH = Path("data/raw/bootstrap-static.json")
-PLAYERS_DIR = Path("data/raw/players")
-
 BASE_URL = "https://fantasy.premierleague.com/api/element-summary/{id}/"
 
 
-def load_bootstrap() -> dict:
-    if not BOOTSTRAP_PATH.exists():
-        raise FileNotFoundError(
-            f"Nincs meg: {BOOTSTRAP_PATH}. Elotte: python3 src/fpl_api.py"
-        )
-    return json.loads(BOOTSTRAP_PATH.read_text(encoding="utf-8"))
+def load_player_ids() -> list[int]:
+    df = pd.read_sql("SELECT id FROM raw.players ORDER BY id", engine)
+    return df["id"].tolist()
 
 
-def fetch_player_summary(player_id: int, ttl_hours: int = 24) -> dict:
-    out_path = PLAYERS_DIR / f"{player_id}.json"
+def fetch_player_summary(player_id: int) -> dict:
     url = BASE_URL.format(id=player_id)
-    return download_json(url, out_path, ttl_hours=ttl_hours)
+    return download_json(url)
 
 def save_history(rows: list):
     df = pd.DataFrame(rows)
@@ -39,8 +30,7 @@ def save_history(rows: list):
     )
 
 def main(sleep_seconds: float = 0.0000000000000003):
-    data = load_bootstrap()
-    player_ids = [p["id"] for p in data["elements"]]
+    player_ids = load_player_ids()
 
     rows = []
 

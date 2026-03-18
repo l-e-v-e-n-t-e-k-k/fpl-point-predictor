@@ -1,7 +1,7 @@
 from pathlib import Path
 from shared.db.connection import engine
 
-SCHEMA_PATH = Path("src/shared/db/schemas.sql")
+SCHEMA_PATH = Path("src/S1/schemas.sql")
 
 def init_db():
     sql = SCHEMA_PATH.read_text(encoding="utf-8")

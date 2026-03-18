@@ -2,13 +2,13 @@
 # Build a dataset for multiple seasons, by merging the previous seasons' CSVs with the current season's CSV.
 import pandas as pd
 import numpy as np
-from features import add_rolling_features
+from S2.features import add_rolling_features
 from pathlib import Path
 from shared.db.connection import engine
 
 RAW_DIR = Path("data/raw/prev_seasons")
-PROCESSED_DIR = Path("data/processed")
 
+PROCESSED_DIR = Path("data/processed")
 OUT_PATH = PROCESSED_DIR / "multiseason_supervised.csv"
 
 KEEP_COLS = [
@@ -124,7 +124,11 @@ def main():
 
     current_df["is_home"] = (current_df["was_home"]).astype(int)
 
-    current_df = current_df[KEEP_COLS]
+    current_keep_cols = KEEP_COLS + [
+        "next_team_difficulty",
+        "next_opponent_difficulty",
+    ]
+    current_df = current_df[current_keep_cols]
     all_dfs.append(current_df)
 
     final_df = pd.concat(all_dfs, ignore_index=True)

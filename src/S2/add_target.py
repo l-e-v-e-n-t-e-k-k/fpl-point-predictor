@@ -9,7 +9,7 @@ def add_target():
 
     df = pd.read_csv(INPUT_PATH)
 
-    df = df.sort_values(["name", "GW"])
+    df = df.sort_values(["name", "GW", "fixture"])
 
     df["target_next_gw"] = (
         df.groupby("name")["total_points"]
