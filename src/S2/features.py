@@ -3,7 +3,7 @@ import pandas as pd
 MIN_AVG_MIN_LAST5 = 0.0
 
 
-def add_rolling_features(df: pd.DataFrame) -> pd.DataFrame:
+def add_rolling_features(df: pd.DataFrame):
     """
     Season-aware rolling feature engineering.
 

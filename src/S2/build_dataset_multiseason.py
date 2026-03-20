@@ -1,14 +1,15 @@
 #build_dataset_multiseason.py
 # Build a dataset for multiple seasons, by merging the previous seasons' CSVs with the current season's CSV.
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from S2.features import add_rolling_features
-from pathlib import Path
 from shared.db.connection import engine
 
-RAW_DIR = Path("data/raw/prev_seasons")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+RAW_DIR = PROJECT_ROOT / "data" / "raw" / "prev_seasons"
 
-PROCESSED_DIR = Path("data/processed")
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 OUT_PATH = PROCESSED_DIR / "multiseason_supervised.csv"
 
 KEEP_COLS = [
@@ -94,8 +95,7 @@ def process_prev_season(merged_path, fixtures_path, season_name):
     return df
 
 
-def main():
-
+def build_multiseason(current_df: pd.DataFrame):
     all_dfs = []
 
     seasons = [
@@ -120,8 +120,7 @@ def main():
         all_dfs.append(df_season)
 
     # ---- Merge with Current Season ----
-    current_df = pd.read_csv(PROCESSED_DIR / "current_season_supervised.csv") # load current season
-
+    current_df = current_df.copy()
     current_df["is_home"] = (current_df["was_home"]).astype(int)
 
     current_keep_cols = KEEP_COLS + [
@@ -133,17 +132,33 @@ def main():
 
     final_df = pd.concat(all_dfs, ignore_index=True)
     final_df = add_rolling_features(final_df)
-    final_df.to_csv(OUT_PATH, index=False)
 
-    print("DONE")
-    print("Total rows:", len(final_df))
+    return final_df
 
-    final_df.to_sql(
+
+def save_multiseason(df: pd.DataFrame, out_path: Path = OUT_PATH):
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out_path, index=False)
+
+
+def save_multiseason_db(df: pd.DataFrame):
+    df.to_sql(
         "player_data",
         engine,
         if_exists="replace",
         index=False
     )
+
+
+def main():
+    current_df = pd.read_csv(PROCESSED_DIR / "current_season_supervised.csv")
+    final_df = build_multiseason(current_df)
+    save_multiseason(final_df, OUT_PATH)
+
+    print("DONE")
+    print("Total rows:", len(final_df))
+
+    save_multiseason_db(final_df)
     
 if __name__ == "__main__":
     main()

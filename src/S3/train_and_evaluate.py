@@ -12,6 +12,10 @@ import joblib
 
 import pandas as pd
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MODEL_DIR = PROJECT_ROOT / "models"
+TEMP_MODEL_PATH = PROJECT_ROOT / "model.joblib"
+
 # IN_PATH = Path("data/processed/multiseason_supervised.csv")
 
 FEATURE_COLS = [
@@ -74,7 +78,7 @@ def rmse(y_true, y_pred):
 def evaluate_model(model, X_train, y_train, X_test, y_test):
 
     model.fit(X_train, y_train)
-    joblib.dump(model, "model.joblib")
+    joblib.dump(model, TEMP_MODEL_PATH)
     y_pred = model.predict(X_test)
 
     mae = mean_absolute_error(y_test, y_pred)
@@ -142,7 +146,6 @@ def main():
     baseline_results = evaluate_model(baseline, X_train, y_train, X_test, y_test)
 
     # ---- Save models ----
-    MODEL_DIR = Path("models")
     MODEL_DIR.mkdir(exist_ok=True)
 
     joblib.dump(lr, MODEL_DIR / "linear_regression.joblib")

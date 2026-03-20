@@ -5,8 +5,10 @@ from pathlib import Path
 from shared.db.connection import engine
 from S3.train_and_evaluate import FEATURE_COLS
 
-MODEL_PATH = Path("models/production_model.joblib")
-SCALER_PATH = Path("models/scaler.joblib")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MODEL_DIR = PROJECT_ROOT / "models"
+MODEL_PATH = MODEL_DIR / "production_model.joblib"
+SCALER_PATH = MODEL_DIR / "scaler.joblib"
 
 TOP_K = 20
 

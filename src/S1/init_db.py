@@ -1,7 +1,8 @@
 from pathlib import Path
 from shared.db.connection import engine
 
-SCHEMA_PATH = Path("src/S1/schemas.sql")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCHEMA_PATH = PROJECT_ROOT / "src" / "S1" / "schemas.sql"
 
 def init_db():
     sql = SCHEMA_PATH.read_text(encoding="utf-8")

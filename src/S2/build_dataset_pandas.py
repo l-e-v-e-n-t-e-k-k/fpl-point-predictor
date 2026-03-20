@@ -1,17 +1,17 @@
 #build_dataset_pandas.py
-# Build dataset for the current season, using the raw JSON files downloaded from the FPL API.
+# Build dataset for the current season from the database.
 from pathlib import Path
 import pandas as pd
 from shared.db.connection import engine
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
-BOOTSTRAP_PATH = Path("data/raw/bootstrap-static.json")
-OUT_PATH = Path("data/processed/current_season_raw.csv")
+OUT_PATH = PROCESSED_DIR / "current_season_raw.csv"
 
 SEASON = "25-26"
 
-
-def build_current_season(out_path: Path):
+def build_current_season():
     query = """
     SELECT
         ph.player_id,
@@ -90,13 +90,18 @@ def build_current_season(out_path: Path):
     ]
 
     df = df[final_cols]
+
+    return df
+
+
+def save_current_season(df: pd.DataFrame, out_path: Path = OUT_PATH) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False)
-
     print(f"OK: wrote {len(df)} rows to {out_path}")
 
 def main():
-        build_current_season(OUT_PATH)
+    df = build_current_season()
+    save_current_season(df, OUT_PATH)
 
 if __name__ == "__main__":
     main()

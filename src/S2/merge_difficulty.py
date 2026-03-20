@@ -3,14 +3,14 @@ import pandas as pd
 import numpy as np
 from shared.db.connection import engine
 
-RAW_PATH = Path("data/processed/current_season_raw.csv")
-OUT_PATH = Path("data/processed/current_season_with_difficulty.csv")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+
+RAW_PATH = PROCESSED_DIR / "current_season_raw.csv"
+OUT_PATH = PROCESSED_DIR / "current_season_with_difficulty.csv"
 
 
-def main():
-
-    df = pd.read_csv(RAW_PATH)
-
+def merge_difficulty(df: pd.DataFrame):
     fixtures_df = pd.read_sql(
         """
         SELECT
@@ -119,10 +119,19 @@ def main():
         ]
     )
 
-    df.to_csv(OUT_PATH, index=False)
+    return df
 
-    print("OK: difficulty merged")
 
+def save_with_difficulty(df: pd.DataFrame, out_path: Path = OUT_PATH):
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out_path, index=False)
+    print(f"OK: difficulty merged -> {out_path}")
+
+
+def main(in_path: Path = RAW_PATH, out_path: Path = OUT_PATH):
+    df = pd.read_csv(in_path)
+    merged_df = merge_difficulty(df)
+    save_with_difficulty(merged_df, out_path)
 
 if __name__ == "__main__":
     main()
