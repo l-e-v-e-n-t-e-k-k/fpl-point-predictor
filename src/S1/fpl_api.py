@@ -89,17 +89,14 @@ def save_fixtures(fixtures: list):
         index=False
     )
 
-def main():
-        data = fetch_bootstrap_static()
-        fixtures = fetch_fixtures()
-        
-        save_teams(data)
-        save_players(data)
-        
-        save_fixtures(fixtures)
-        print("Keys:", list(data.keys()))
-        print("Players:", len(data["elements"]))
-        print("Teams:", len(data["teams"]))
-
 if __name__ == "__main__":
-    main()
+    data = fetch_bootstrap_static()
+    fixtures = fetch_fixtures()
+        
+    save_teams(data)
+    save_players(data)    
+    save_fixtures(fixtures)
+    
+    print("Keys:", list(data.keys()))
+    print("Players:", len(data["elements"]))
+    print("Teams:", len(data["teams"]))

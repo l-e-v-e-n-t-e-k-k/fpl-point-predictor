@@ -14,7 +14,6 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = PROJECT_ROOT / "models"
-TEMP_MODEL_PATH = PROJECT_ROOT / "model.joblib"
 
 # IN_PATH = Path("data/processed/multiseason_supervised.csv")
 
@@ -37,12 +36,12 @@ TARGET_COL = "target_next_gw"
 
 
 # ---- Rolling GW split (season-aware) ----
-def rolling_gw_split(df, split_ratio=0.7):
+def rolling_gw_split(df, split_ratio=0.7, logs=False):
     """
-    Minden szezonon belul:
+    In every season, split the data by gameweek:
         train: GW <= 70%
         test : GW > 70%
-        - minden playernek van multja
+        - every player has history in the train set, but not necessarily in the test set
     """
 
     train_parts = []
@@ -59,7 +58,8 @@ def rolling_gw_split(df, split_ratio=0.7):
         train_parts.append(train_part)
         test_parts.append(test_part)
 
-        print(f"{season}: max_gw={max_gw}, split_gw={split_gw}")
+        if logs:
+            print(f"{season}: max_gw={max_gw}, split_gw={split_gw}")
 
     train_df = pd.concat(train_parts)
     test_df = pd.concat(test_parts)
@@ -78,7 +78,6 @@ def rmse(y_true, y_pred):
 def evaluate_model(model, X_train, y_train, X_test, y_test):
 
     model.fit(X_train, y_train)
-    joblib.dump(model, TEMP_MODEL_PATH)
     y_pred = model.predict(X_test)
 
     mae = mean_absolute_error(y_test, y_pred)
@@ -92,9 +91,7 @@ def evaluate_model(model, X_train, y_train, X_test, y_test):
         rmse
     }
 
-def main():
-
-   # df = pd.read_csv(IN_PATH)
+def main(logs=False):
 
     df = pd.read_sql(
         "SELECT * FROM player_data",
@@ -103,14 +100,12 @@ def main():
     # ---- last gameweek drop ----
     df = df.dropna(subset=["target_next_gw", "next_opponent_difficulty"])
 
-  #  df = add_rolling_features(df)
-
     #df_model = df.dropna(subset=["avg_pts_last5"])
     #df_model = df_model[df_model["avg_min_last5"] >= 0.0]
 
-    train_df, test_df = rolling_gw_split(df, split_ratio=0.7)
+    train_df, test_df = rolling_gw_split(df, split_ratio=0.7, logs=logs)
 
-    X_train = train_df[FEATURE_COLS]   # .values.tolist() numpy array
+    X_train = train_df[FEATURE_COLS]   
     y_train = train_df[TARGET_COL]
     
     X_test = test_df[FEATURE_COLS]
@@ -122,9 +117,6 @@ def main():
     
     X_train_scaled = scaler.transform(X_train)
     X_test_scaled = scaler.transform(X_test)    
-
-   # X_train = [[1.0] + row for row in X_train]
-   # X_test = [[1.0] + row for row in X_test]
 
     print("Train rows:", len(train_df))
     print("Test rows :", len(test_df))
@@ -171,43 +163,41 @@ def main():
     best_model = model_objects[best_model_name]
     
     joblib.dump(best_model, MODEL_DIR / "production_model.joblib")
+    print(f"LinearRegression  -> MAE: {lr_results['MAE']:.3f}, RMSE: {lr_results['RMSE']:.3f}")
+    print(f"RandomForestRegressor -> MAE: {rf_results['MAE']:.3f}, RMSE: {rf_results['RMSE']:.3f}")
+    print(f"MeanBaseline      -> MAE: {baseline_results['MAE']:.3f}, RMSE: {baseline_results['RMSE']:.3f}")
+
     print(
         f"\nBest model: {best_model_name} "
         f"with MAE: {models[best_model_name]['MAE']:.3f}"
     )
 
-    # ---- Print comparison ----
-    print("\n===== Model Comparison =====")
+    improvement_lr = baseline_results["MAE"] - lr_results["MAE"]
+    print(f"\nLinearRegression MAE improvement vs baseline: {improvement_lr:.3f}")
+    improvement_rf = baseline_results["MAE"] - rf_results["MAE"]
+    print(f"RandomForestRegressor MAE improvement vs baseline: {improvement_rf:.3f}")
 
-    print("\n===== LinearRegression Weights =====")
+    if logs:
+        print("\n===== LinearRegression Weights =====")
+        print("Intercept/bias:", lr.intercept_)
 
-    print("Intercept (bias):", lr.intercept_)
+        for feature_name, weight in zip(FEATURE_COLS, lr.coef_):
+            print(f"{feature_name:<22}: {weight:.4f}")
 
-    for feature_name, weight in zip(FEATURE_COLS, lr.coef_):
-        print(f"{feature_name:<22}: {weight:.4f}")
+        print("\n===== Sample Predictions =====")
 
-    print(f"LinearRegression  -> MAE: {lr_results['MAE']:.3f}, RMSE: {lr_results['RMSE']:.3f}")
-    print(f"RandomForestRegressor -> MAE: {rf_results['MAE']:.3f}, RMSE: {rf_results['RMSE']:.3f}")
-    print(f"MeanBaseline      -> MAE: {baseline_results['MAE']:.3f}, RMSE: {baseline_results['RMSE']:.3f}")
+        print("\nLinearRegression:")
+        for i in range(min(10, len(y_test))):
+            print(f"{y_test.iloc[i]:>5.0f} -> {lr_results['y_pred'][i]:>6.2f}")
 
-    improvement = baseline_results["MAE"] - lr_results["MAE"]
-    print(f"\nMAE improvement vs baseline: {improvement:.3f}")
+        print("\nRandomForestRegressor:")
+        for i in range(min(10, len(y_test))):
+            print(f"{y_test.iloc[i]:>5.0f} -> {rf_results['y_pred'][i]:>6.2f}")
 
-    # ---- Sample predictions ----
-    print("\n===== Sample Predictions =====")
-
-    print("\nLinearRegression:")
-    for i in range(min(10, len(y_test))):
-        print(f"{y_test.iloc[i]:>5.0f} -> {lr_results['y_pred'][i]:>6.2f}")
-
-    print("\nRandomForestRegressor:")
-    for i in range(min(10, len(y_test))):
-        print(f"{y_test.iloc[i]:>5.0f} -> {rf_results['y_pred'][i]:>6.2f}")
-
-    print("\nMeanBaseline:")
-    for i in range(min(10, len(y_test))):
-        print(f"{y_test.iloc[i]:>5.0f} -> {baseline_results['y_pred'][i]:>6.2f}")
+        print("\nMeanBaseline:")
+        for i in range(min(10, len(y_test))):
+            print(f"{y_test.iloc[i]:>5.0f} -> {baseline_results['y_pred'][i]:>6.2f}")
 
 
 if __name__ == "__main__":
-    main()
+    main(logs=True)

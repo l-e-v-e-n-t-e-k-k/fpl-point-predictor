@@ -1,18 +1,15 @@
-DROP TABLE raw.player_history;
-DROP TABLE raw.fixtures;
-DROP TABLE raw.players;
-DROP TABLE raw.teams;
-
 CREATE SCHEMA IF NOT EXISTS raw;
 
+
+
 --- Bootstrap tables ---
-CREATE TABLE raw.teams (
+CREATE TABLE IF NOT EXISTS raw.teams (
     id INT PRIMARY KEY,
     name TEXT NOT NULL,
     short_name TEXT NOT NULL
 );
 
-CREATE TABLE raw.players (
+CREATE TABLE IF NOT EXISTS raw.players (
     id INT PRIMARY KEY,
     web_name TEXT,
     first_name TEXT,
@@ -24,7 +21,7 @@ CREATE TABLE raw.players (
 );
 
 --- Fixture tables ---
-CREATE TABLE raw.fixtures (
+CREATE TABLE IF NOT EXISTS raw.fixtures (
     id INT PRIMARY KEY,
     event INT,
     kickoff_time TIMESTAMP,
@@ -38,7 +35,7 @@ CREATE TABLE raw.fixtures (
 );
 
 --- Player history tables by gameweek ---
-CREATE TABLE raw.player_history (
+CREATE TABLE IF NOT EXISTS raw.player_history (
     player_id INT REFERENCES raw.players(id),
     fixture INT REFERENCES raw.fixtures(id),
     round INT,

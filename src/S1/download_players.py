@@ -7,31 +7,17 @@ import pandas as pd
 BASE_URL = "https://fantasy.premierleague.com/api/element-summary/{id}/"
 
 
-def load_player_ids() -> list[int]:
+def load_player_ids():
     df = pd.read_sql("SELECT id FROM raw.players ORDER BY id", engine)
     return df["id"].tolist()
 
 
-def fetch_player_summary(player_id: int) -> dict:
+def fetch_player_summary(player_id: int):
     url = BASE_URL.format(id=player_id)
     return download_json(url)
 
-def save_history(rows: list):
-    df = pd.DataFrame(rows)
 
-    df["kickoff_time"] = pd.to_datetime(df["kickoff_time"], utc=True)
-
-    df.to_sql(
-        "player_history",
-        engine,
-        schema="raw",
-        if_exists="append",
-        index=False
-    )
-
-def main(sleep_seconds: float = 0.0000000000000003):
-    player_ids = load_player_ids()
-
+def collect_history_rows(player_ids, sleep_seconds: float = 0.0000000000000001, logs: bool = False):
     rows = []
 
     for i, pid in enumerate(player_ids, start=1):
@@ -61,17 +47,36 @@ def main(sleep_seconds: float = 0.0000000000000003):
                     "value": h.get("value"),
                 })
 
-            print(f"[{i}/{len(player_ids)}] OK player_id={pid}")
+            if logs:
+                print(f"[{i}/{len(player_ids)}] OK player_id={pid}")
 
         except Exception as e:
-            print(f"[{i}/{len(player_ids)}] FAIL player_id={pid}: {e}")
+            if logs:
+                print(f"[{i}/{len(player_ids)}] FAIL player_id={pid}: {e}")
 
         time.sleep(sleep_seconds)
+
+    return rows
+
+
+def save_history(rows: list):
+    df = pd.DataFrame(rows)
+
+    df["kickoff_time"] = pd.to_datetime(df["kickoff_time"], utc=True)
+
+    df.to_sql(
+        "player_history",
+        engine,
+        schema="raw",
+        if_exists="append",
+        index=False
+    )
+
+
+if __name__ == "__main__":
+    player_ids = load_player_ids()
+    rows = collect_history_rows(player_ids, logs=True)
 
     save_history(rows)
 
     print(f"\nSaved {len(rows)} player history rows to database.")
-
-
-if __name__ == "__main__":
-    main()
