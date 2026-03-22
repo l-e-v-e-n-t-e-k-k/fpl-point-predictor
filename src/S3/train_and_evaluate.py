@@ -1,5 +1,7 @@
-# src/train_and_evaluate.py
+import json
+import os
 from pathlib import Path
+from datetime import datetime, timezone
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
@@ -13,9 +15,9 @@ import joblib
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODEL_DIR = PROJECT_ROOT / "models"
+MODEL_DIR = Path(os.getenv("MODEL_BASE_DIR", str(PROJECT_ROOT / "models")))
+LATEST_METADATA_PATH = MODEL_DIR / "latest.json"
 
-# IN_PATH = Path("data/processed/multiseason_supervised.csv")
 
 FEATURE_COLS = [
     "avg_pts_last3",
@@ -27,6 +29,7 @@ FEATURE_COLS = [
     "avg_xgi_last5",
     "expected_goals_conceded",
     "clean_sheets_last5",
+    "saves",
     "bps",
     "next_team_difficulty",
     "next_opponent_difficulty"
@@ -91,6 +94,20 @@ def evaluate_model(model, X_train, y_train, X_test, y_test):
         rmse
     }
 
+
+def create_version_dir():
+    version = datetime.now(timezone.utc).strftime("v%Y%m%d_%H%M%S")
+    version_dir = MODEL_DIR / version
+    version_dir.mkdir(parents=True, exist_ok=False)
+    return version, version_dir
+
+
+def write_json_atomic(path: Path, payload: dict):
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    tmp_path.replace(path)
+
 def main(logs=False):
 
     df = pd.read_sql(
@@ -137,15 +154,6 @@ def main(logs=False):
     baseline = DummyRegressor(strategy="mean")
     baseline_results = evaluate_model(baseline, X_train, y_train, X_test, y_test)
 
-    # ---- Save models ----
-    MODEL_DIR.mkdir(exist_ok=True)
-
-    joblib.dump(lr, MODEL_DIR / "linear_regression.joblib")
-    joblib.dump(rf, MODEL_DIR / "random_forest.joblib")
-    joblib.dump(baseline, MODEL_DIR / "baseline.joblib")
-
-    joblib.dump(scaler, MODEL_DIR / "scaler.joblib")
-        
     models = {
         "lr": lr_results,
         "rf": rf_results,
@@ -161,8 +169,17 @@ def main(logs=False):
     }
     
     best_model = model_objects[best_model_name]
-    
-    joblib.dump(best_model, MODEL_DIR / "production_model.joblib")
+
+    # ---- Save versioned artifacts ----
+    MODEL_DIR.mkdir(exist_ok=True)
+    version, version_dir = create_version_dir()
+
+    joblib.dump(lr, version_dir / "linear_regression.joblib")
+    joblib.dump(rf, version_dir / "random_forest.joblib")
+    joblib.dump(baseline, version_dir / "baseline.joblib")
+    joblib.dump(scaler, version_dir / "scaler.joblib")
+    joblib.dump(best_model, version_dir / "production_model.joblib")
+
     print(f"LinearRegression  -> MAE: {lr_results['MAE']:.3f}, RMSE: {lr_results['RMSE']:.3f}")
     print(f"RandomForestRegressor -> MAE: {rf_results['MAE']:.3f}, RMSE: {rf_results['RMSE']:.3f}")
     print(f"MeanBaseline      -> MAE: {baseline_results['MAE']:.3f}, RMSE: {baseline_results['RMSE']:.3f}")
@@ -176,6 +193,35 @@ def main(logs=False):
     print(f"\nLinearRegression MAE improvement vs baseline: {improvement_lr:.3f}")
     improvement_rf = baseline_results["MAE"] - rf_results["MAE"]
     print(f"RandomForestRegressor MAE improvement vs baseline: {improvement_rf:.3f}")
+
+    version_metadata = {
+        "version": version,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "best_model_name": best_model_name,
+        "model_type": type(best_model).__name__,
+        "feature_cols": FEATURE_COLS,
+        "metrics": {
+            "lr": {"mae": lr_results["MAE"], "rmse": lr_results["RMSE"]},
+            "rf": {"mae": rf_results["MAE"], "rmse": rf_results["RMSE"]},
+            "baseline": {"mae": baseline_results["MAE"], "rmse": baseline_results["RMSE"]},
+        },
+    }
+    write_json_atomic(version_dir / "metadata.json", version_metadata)
+
+    latest_metadata = {
+        "version": version,
+        "created_at": version_metadata["created_at"],
+        "model_dir": f"models/{version}",
+        "model_path": f"models/{version}/production_model.joblib",
+        "scaler_path": f"models/{version}/scaler.joblib",
+        "metadata_path": f"models/{version}/metadata.json",
+        "best_model_name": best_model_name,
+        "model_type": type(best_model).__name__,
+        "mae": models[best_model_name]["MAE"],
+        "rmse": models[best_model_name]["RMSE"],
+    }
+    write_json_atomic(LATEST_METADATA_PATH, latest_metadata)
+    print(f"Saved version: {version}")
 
     if logs:
         print("\n===== LinearRegression Weights =====")

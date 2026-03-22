@@ -1,5 +1,9 @@
+import json
 import joblib
+import os
 import pandas as pd
+import threading
+import time
 
 from pathlib import Path
 from fastapi import FastAPI
@@ -9,29 +13,31 @@ from S3.train_and_evaluate import FEATURE_COLS
 app = FastAPI()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODEL_DIR = PROJECT_ROOT / "models"
-MODEL_PATH = MODEL_DIR / "production_model.joblib"
-SCALER_PATH = MODEL_DIR / "scaler.joblib"
+MODEL_DIR = Path(os.getenv("MODEL_BASE_DIR", str(PROJECT_ROOT / "models")))
+LATEST_METADATA_PATH = MODEL_DIR / "latest.json"
+MODEL_POLL_SECONDS = float(os.getenv("MODEL_POLL_SECONDS", "10"))
 
 TOP_K = 20
 
 model = None
 scaler = None
 player_meta = {}
+current_version = None
+model_lock = threading.Lock()
 
 
 # ---- helper functions ----
-def normalize_name(name: str) -> str:
+def normalize_name(name: str):
     if not name:
         return ""
     return " ".join(name.lower().strip().split())
 
 
-def pos_name(element_type: int) -> str:
+def pos_name(element_type: int):
     return {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}.get(element_type, str(element_type))
 
 
-def load_player_meta() -> dict:
+def load_player_meta():
     meta_df = pd.read_sql(
         """
         SELECT
@@ -65,23 +71,73 @@ def load_player_meta() -> dict:
     return meta
 
 
+def resolve_path(path_str: str):
+    path = Path(path_str)
+    if path.is_absolute():
+        return path
+    return PROJECT_ROOT / path
+
+
+def load_latest_paths():
+    with LATEST_METADATA_PATH.open("r", encoding="utf-8") as f:
+        latest = json.load(f)
+
+    model_path = resolve_path(latest["model_path"])
+    scaler_path = resolve_path(latest["scaler_path"])
+    return model_path, scaler_path, latest
+
+
+def load_model_artifacts():
+    global model, scaler, player_meta, current_version
+
+    model_path, scaler_path, latest = load_latest_paths()
+
+    if latest["version"] == current_version:
+        return False
+
+    loaded_model = joblib.load(model_path)
+    loaded_scaler = joblib.load(scaler_path)
+    loaded_player_meta = load_player_meta()
+
+    with model_lock:
+        model = loaded_model
+        scaler = loaded_scaler
+        player_meta = loaded_player_meta
+        current_version = latest["version"]
+
+    print(f"Model loaded: {latest['version']} ({latest['model_type']})")
+    return True
+
+
+def model_watcher():
+    while True:
+        try:
+            load_model_artifacts()
+        except Exception as exc:
+            print(f"Model reload error: {exc}")
+        time.sleep(MODEL_POLL_SECONDS)
+
+
 # ---- startup ----
 @app.on_event("startup")
 def load_model():
+    load_model_artifacts()
 
-    global model, scaler, player_meta
-
-    model = joblib.load(MODEL_PATH)
-    scaler = joblib.load(SCALER_PATH)
-
-    player_meta = load_player_meta()
-
-    print("Model loaded")
+    if MODEL_POLL_SECONDS > 0:
+        watcher = threading.Thread(target=model_watcher, daemon=True)
+        watcher.start()
 
 
 # ---- prediction endpoint ----
 @app.get("/predict")
 def predict():
+    with model_lock:
+        loaded_model = model
+        loaded_scaler = scaler
+        loaded_player_meta = dict(player_meta)
+
+    if loaded_model is None:
+        raise RuntimeError("Model is not loaded")
 
     df = pd.read_sql("SELECT * FROM player_data", engine)
 
@@ -112,10 +168,10 @@ def predict():
 
     X_next = next_gw_df[FEATURE_COLS]
 
-    if "LinearRegression" in str(type(model)):
-        X_next = scaler.transform(X_next)
+    if "LinearRegression" in str(type(loaded_model)):
+        X_next = loaded_scaler.transform(X_next)
 
-    preds = model.predict(X_next)
+    preds = loaded_model.predict(X_next)
 
     next_gw_df["predicted_points"] = preds
 
@@ -132,7 +188,7 @@ def predict():
 
         player_name = getattr(row, "name")
 
-        meta = player_meta.get(
+        meta = loaded_player_meta.get(
             normalize_name(player_name),
             {"team": "Unknown", "pos": "", "price": 0, "web_name": player_name}
         )
@@ -165,7 +221,7 @@ def predict():
 
             player_name = getattr(row, "name")
 
-            meta = player_meta.get(
+            meta = loaded_player_meta.get(
                 normalize_name(player_name),
                 {"team": "Unknown", "pos": "", "price": 0, "web_name": player_name}
             )

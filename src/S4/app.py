@@ -1,4 +1,6 @@
+import json
 import joblib
+import os
 import pandas as pd
 
 from pathlib import Path
@@ -6,9 +8,8 @@ from shared.db.connection import engine
 from S3.train_and_evaluate import FEATURE_COLS
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODEL_DIR = PROJECT_ROOT / "models"
-MODEL_PATH = MODEL_DIR / "production_model.joblib"
-SCALER_PATH = MODEL_DIR / "scaler.joblib"
+MODEL_DIR = Path(os.getenv("MODEL_BASE_DIR", str(PROJECT_ROOT / "models")))
+LATEST_METADATA_PATH = MODEL_DIR / "latest.json"
 
 TOP_K = 20
 
@@ -56,12 +57,29 @@ def load_player_meta() -> dict:
     return player_meta
 
 
+def resolve_path(path_str: str):
+    path = Path(path_str)
+    if path.is_absolute():
+        return path
+    return PROJECT_ROOT / path
+
+
+def load_latest_paths():
+    with LATEST_METADATA_PATH.open("r", encoding="utf-8") as f:
+        latest = json.load(f)
+
+    model_path = resolve_path(latest["model_path"])
+    scaler_path = resolve_path(latest["scaler_path"])
+    return model_path, scaler_path, latest
+
+
 def predict():
 
-    model = joblib.load(MODEL_PATH)
-    scaler = joblib.load(SCALER_PATH)
+    model_path, scaler_path, latest = load_latest_paths()
+    model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
     
-    print("Loaded production model:", type(model).__name__)
+    print(f"Loaded production model: {latest['version']} ({latest['model_type']})")
 
     # ---- Load metadata ----
     player_meta = load_player_meta()

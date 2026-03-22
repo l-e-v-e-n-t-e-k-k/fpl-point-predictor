@@ -1,0 +1,12 @@
+{
+  "version": "v20260321_231509",
+  "created_at": "2026-03-21T23:15:09.987439+00:00",
+  "model_dir": "models/v20260321_231509",
+  "model_path": "models/v20260321_231509/production_model.joblib",
+  "scaler_path": "models/v20260321_231509/scaler.joblib",
+  "metadata_path": "models/v20260321_231509/metadata.json",
+  "best_model_name": "rf",
+  "model_type": "RandomForestRegressor",
+  "mae": 1.6069350530896611,
+  "rmse": 2.502883431115822
+}
