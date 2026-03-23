@@ -4,12 +4,13 @@ import os
 import pandas as pd
 
 from pathlib import Path
-from shared.db.connection import engine
-from S3.train_and_evaluate import FEATURE_COLS
+from shared.http.json_client import fetch_url
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = Path(os.getenv("MODEL_BASE_DIR", str(PROJECT_ROOT / "models")))
 LATEST_METADATA_PATH = MODEL_DIR / "latest.json"
+S1_BASE_URL = os.getenv("S1_BASE_URL", "http://localhost:8002").strip()
+S2_BASE_URL = os.getenv("S2_BASE_URL", "http://localhost:8001").strip()
 
 TOP_K = 20
 
@@ -24,21 +25,12 @@ def pos_name(element_type: int) -> str:
 
 
 def load_player_meta() -> dict:
-    meta_df = pd.read_sql(
-        """
-        SELECT
-            p.first_name,
-            p.second_name,
-            p.web_name,
-            p.element_type,
-            p.now_cost,
-            t.name AS team_name
-        FROM raw.players p
-        LEFT JOIN raw.teams t
-            ON p.team = t.id
-        """,
-        engine
-    )
+    if not S1_BASE_URL:
+        raise RuntimeError("S1_BASE_URL is required for app player metadata loading")
+
+    payload = fetch_url(S1_BASE_URL, "player-meta")
+    data = payload.get("data", [])
+    meta_df = pd.DataFrame(data)
 
     player_meta = {}
 
@@ -70,14 +62,18 @@ def load_latest_paths():
 
     model_path = resolve_path(latest["model_path"])
     scaler_path = resolve_path(latest["scaler_path"])
-    return model_path, scaler_path, latest
+    metadata_path = resolve_path(latest["metadata_path"])
+    return model_path, scaler_path, metadata_path, latest
 
 
 def predict():
 
-    model_path, scaler_path, latest = load_latest_paths()
+    model_path, scaler_path, metadata_path, latest = load_latest_paths()
     model = joblib.load(model_path)
     scaler = joblib.load(scaler_path)
+    with metadata_path.open("r", encoding="utf-8") as f:
+        metadata = json.load(f)
+    feature_cols = metadata["feature_cols"]
     
     print(f"Loaded production model: {latest['version']} ({latest['model_type']})")
 
@@ -85,10 +81,12 @@ def predict():
     player_meta = load_player_meta()
 
     # ---- Load match history ----
-    df = pd.read_sql(
-        "SELECT * FROM player_data",
-        engine
-    )
+    if not S2_BASE_URL:
+        raise RuntimeError("S2_BASE_URL is required for app prediction loading")
+
+    payload = fetch_url(S2_BASE_URL, "/player-data/latest")
+    data = payload.get("data", [])
+    df = pd.DataFrame(data)
     ## ---- Add features and predict next GW ----
 
     latest_season = df["season"].max()
@@ -99,7 +97,7 @@ def predict():
         (df["GW"] == latest_gw)
     ].copy()
 
-    X_next = next_gw_df[FEATURE_COLS]
+    X_next = next_gw_df[feature_cols]
 
     if "LinearRegression" in str(type(model)):
         X_next = scaler.transform(X_next)

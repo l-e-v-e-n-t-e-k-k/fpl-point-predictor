@@ -1,6 +1,6 @@
 #fpl_api.py
 from S1.data_utils import download_json
-from shared.db.connection import engine
+from shared.db.connection import raw_engine
 import pandas as pd
 
 BOOTSTRAP_URL = "https://fantasy.premierleague.com/api/bootstrap-static/"
@@ -27,12 +27,12 @@ def save_players(data: dict):
         ]
     ]
 
-    with engine.begin() as conn:
+    with raw_engine.begin() as conn:
         conn.exec_driver_sql("TRUNCATE TABLE raw.players CASCADE")
 
     players.to_sql(
         "players",
-        engine,
+        raw_engine,
         schema="raw",
         if_exists="append",
         index=False
@@ -48,12 +48,12 @@ def save_teams(data: dict):
         ]
     ]
 
-    with engine.begin() as conn:
+    with raw_engine.begin() as conn:
         conn.exec_driver_sql("TRUNCATE TABLE raw.teams CASCADE")
 
     teams.to_sql(
         "teams",
-        engine,
+        raw_engine,
         schema="raw",
         if_exists="append",
         index=False
@@ -78,12 +78,12 @@ def save_fixtures(fixtures: list):
 
     df["kickoff_time"] = pd.to_datetime(df["kickoff_time"], utc=True)
 
-    with engine.begin() as conn:
+    with raw_engine.begin() as conn:
         conn.exec_driver_sql("TRUNCATE TABLE raw.fixtures CASCADE")
 
     df.to_sql(
         "fixtures",
-        engine,
+        raw_engine,
         schema="raw",
         if_exists="append",
         index=False

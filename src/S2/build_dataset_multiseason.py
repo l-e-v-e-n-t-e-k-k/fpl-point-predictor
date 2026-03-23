@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 from S2.features import add_rolling_features
-from shared.db.connection import engine
+from shared.db.connection import feature_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAW_DIR = PROJECT_ROOT / "data" / "raw" / "prev_seasons"
@@ -141,10 +141,10 @@ def save_multiseason(df: pd.DataFrame, out_path: Path = OUT_PATH):
     df.to_csv(out_path, index=False)
 
 
-def save_multiseason_db(df: pd.DataFrame):
+def save_multiseason_db(df: pd.DataFrame, table_name: str = "player_data"):
     df.to_sql(
-        "player_data",
-        engine,
+        table_name,
+        feature_engine,
         if_exists="replace",
         index=False
     )

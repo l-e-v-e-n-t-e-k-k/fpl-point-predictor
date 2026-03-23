@@ -3,11 +3,7 @@ uvicorn[standard]
 
 pandas
 numpy
-scikit-learn
-joblib
 requests
 
 sqlalchemy
 psycopg2-binary
-
-pydantic

@@ -1,8 +1,12 @@
 #build_dataset_pandas.py
 # Build dataset for the current season from the database.
+import os
 from pathlib import Path
+
+import numpy as np
 import pandas as pd
-from shared.db.connection import engine
+
+from shared.http.json_client import fetch_url
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
@@ -10,39 +14,20 @@ PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 OUT_PATH = PROCESSED_DIR / "current_season_raw.csv"
 
 SEASON = "25-26"
+S1_BASE_URL = os.getenv("S1_BASE_URL", "").strip()
+
+
+def load_current_season_rows():
+    if not S1_BASE_URL:
+        raise RuntimeError("S1_BASE_URL is required for S2 current season loading")
+
+    payload = fetch_url(S1_BASE_URL, "current-season")
+    data = payload.get("data", [])
+    return pd.DataFrame(data)
+
 
 def build_current_season():
-    query = """
-    SELECT
-        ph.player_id,
-        ph.round AS "GW",
-        ph.minutes,
-        ph.total_points,
-        ph.clean_sheets,
-        ph.bps,
-        ph.saves,
-        ph.expected_goals,
-        ph.expected_assists,
-        ph.expected_goals_conceded,
-        ph.value,
-        ph.was_home,
-        ph.opponent_team,
-        ph.fixture,
-
-        CONCAT(p.first_name, ' ', p.second_name) AS name,
-        CASE
-            WHEN p.element_type = 1 THEN 'GKP'
-            WHEN p.element_type = 2 THEN 'DEF'
-            WHEN p.element_type = 3 THEN 'MID'
-            WHEN p.element_type = 4 THEN 'FWD'
-        END AS position
-    FROM raw.player_history ph
-    JOIN raw.players p
-        ON ph.player_id = p.id
-    ORDER BY ph.player_id, ph.round, ph.fixture
-    """
-
-    df = pd.read_sql(query, engine)
+    df = pd.DataFrame(load_current_season_rows())
 
     df["season"] = SEASON
 
@@ -68,6 +53,7 @@ def build_current_season():
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    df["team_id"] = np.where(df["was_home"], df["team_h"], df["team_a"])
     df = df.sort_values(["player_id", "GW", "fixture"])
 
     final_cols = [
@@ -85,6 +71,7 @@ def build_current_season():
         "bps",
         "value",
         "was_home",
+        "team_id",
         "opponent_team",
         "fixture",
     ]

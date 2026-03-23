@@ -1,4 +1,4 @@
-from shared.db.connection import engine
+from shared.db.connection import default_engine
 
-with engine.connect() as conn:
+with default_engine.connect() as conn:
     print("DB connection OK")

@@ -8,7 +8,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from shared.db.connection import engine
+from shared.http.json_client import fetch_url
 
 import joblib
 
@@ -36,6 +36,16 @@ FEATURE_COLS = [
 ]
 
 TARGET_COL = "target_next_gw"
+S2_BASE_URL = os.getenv("S2_BASE_URL", "").strip()
+
+
+def load_feature_df() -> pd.DataFrame:
+    if not S2_BASE_URL:
+        raise RuntimeError("S2_BASE_URL is required for trainer feature loading")
+
+    payload = fetch_url(S2_BASE_URL, "/player-data")
+    data = payload.get("data", [])
+    return pd.DataFrame(data)
 
 
 # ---- Rolling GW split (season-aware) ----
@@ -110,10 +120,7 @@ def write_json_atomic(path: Path, payload: dict):
 
 def main(logs=False):
 
-    df = pd.read_sql(
-        "SELECT * FROM player_data",
-        engine
-    )   
+    df = load_feature_df()
     # ---- last gameweek drop ----
     df = df.dropna(subset=["target_next_gw", "next_opponent_difficulty"])
 

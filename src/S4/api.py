@@ -7,8 +7,7 @@ import time
 
 from pathlib import Path
 from fastapi import FastAPI
-from shared.db.connection import engine
-from S3.train_and_evaluate import FEATURE_COLS
+from shared.http.json_client import fetch_url
 
 app = FastAPI()
 
@@ -16,11 +15,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = Path(os.getenv("MODEL_BASE_DIR", str(PROJECT_ROOT / "models")))
 LATEST_METADATA_PATH = MODEL_DIR / "latest.json"
 MODEL_POLL_SECONDS = float(os.getenv("MODEL_POLL_SECONDS", "10"))
+S1_BASE_URL = os.getenv("S1_BASE_URL", "").strip()
+S2_BASE_URL = os.getenv("S2_BASE_URL", "").strip()
 
 TOP_K = 20
 
 model = None
 scaler = None
+feature_cols = []
 player_meta = {}
 current_version = None
 model_lock = threading.Lock()
@@ -38,21 +40,12 @@ def pos_name(element_type: int):
 
 
 def load_player_meta():
-    meta_df = pd.read_sql(
-        """
-        SELECT
-            p.first_name,
-            p.second_name,
-            p.web_name,
-            p.element_type,
-            p.now_cost,
-            t.name AS team_name
-        FROM raw.players p
-        LEFT JOIN raw.teams t
-            ON p.team = t.id
-        """,
-        engine
-    )
+    if not S1_BASE_URL:
+        raise RuntimeError("S1_BASE_URL is required for API player metadata loading")
+
+    payload = fetch_url(S1_BASE_URL, "player-meta")
+    data = payload.get("data", [])
+    meta_df = pd.DataFrame(data)
 
     meta = {}
 
@@ -75,7 +68,17 @@ def resolve_path(path_str: str):
     path = Path(path_str)
     if path.is_absolute():
         return path
-    return PROJECT_ROOT / path
+
+    candidates = [
+        PROJECT_ROOT / path,
+        MODEL_DIR.parent / path,
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    return candidates[0]
 
 
 def load_latest_paths():
@@ -84,24 +87,29 @@ def load_latest_paths():
 
     model_path = resolve_path(latest["model_path"])
     scaler_path = resolve_path(latest["scaler_path"])
-    return model_path, scaler_path, latest
+    metadata_path = resolve_path(latest["metadata_path"])
+    return model_path, scaler_path, metadata_path, latest
 
 
 def load_model_artifacts():
-    global model, scaler, player_meta, current_version
+    global model, scaler, feature_cols, player_meta, current_version
 
-    model_path, scaler_path, latest = load_latest_paths()
+    model_path, scaler_path, metadata_path, latest = load_latest_paths()
 
     if latest["version"] == current_version:
         return False
 
     loaded_model = joblib.load(model_path)
     loaded_scaler = joblib.load(scaler_path)
+    with metadata_path.open("r", encoding="utf-8") as f:
+        metadata = json.load(f)
+    loaded_feature_cols = metadata["feature_cols"]
     loaded_player_meta = load_player_meta()
 
     with model_lock:
         model = loaded_model
         scaler = loaded_scaler
+        feature_cols = loaded_feature_cols
         player_meta = loaded_player_meta
         current_version = latest["version"]
 
@@ -134,29 +142,18 @@ def predict():
     with model_lock:
         loaded_model = model
         loaded_scaler = scaler
+        loaded_feature_cols = list(feature_cols)
         loaded_player_meta = dict(player_meta)
 
     if loaded_model is None:
         raise RuntimeError("Model is not loaded")
 
-    df = pd.read_sql("SELECT * FROM player_data", engine)
+    if not S2_BASE_URL:
+        raise RuntimeError("S2_BASE_URL is required for API prediction loading")
 
-    query = """
-    SELECT *
-    FROM player_data
-    WHERE season = (
-        SELECT MAX(season) FROM player_data
-    )
-    AND GW = (
-        SELECT MAX(GW)
-        FROM player_data
-        WHERE season = (
-            SELECT MAX(season) FROM player_data
-        )
-    )
-    """
-
-    # df = pd.read_sql(query, engine)
+    payload = fetch_url(S2_BASE_URL, "/player-data/latest")
+    data = payload.get("data", [])
+    df = pd.DataFrame(data)
 
     latest_season = df["season"].max()
     latest_gw = df[df["season"] == latest_season]["GW"].max()
@@ -166,7 +163,7 @@ def predict():
         (df["GW"] == latest_gw)
     ].copy()
 
-    X_next = next_gw_df[FEATURE_COLS]
+    X_next = next_gw_df[loaded_feature_cols]
 
     if "LinearRegression" in str(type(loaded_model)):
         X_next = loaded_scaler.transform(X_next)

@@ -1,18 +1,42 @@
-version: "3.9"
-
 services:
-  postgres:
+  raw-postgres:
     image: postgres:15
-    container_name: fpl_postgres
+    container_name: fpl_raw_postgres
     restart: always
     environment:
       POSTGRES_USER: mluser
       POSTGRES_PASSWORD: mlpass
-      POSTGRES_DB: fpldb
+      POSTGRES_DB: rawdb
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - raw_postgres_data:/var/lib/postgresql/data
+
+  feature-postgres:
+    image: postgres:15
+    container_name: fpl_feature_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: mluser
+      POSTGRES_PASSWORD: mlpass
+      POSTGRES_DB: featuredb
+    ports:
+      - "5433:5432"
+    volumes:
+      - feature_postgres_data:/var/lib/postgresql/data
+
+  raw-api:
+    build:
+      context: .
+      dockerfile: src/S1/Dockerfile
+    container_name: fpl_raw_api
+    restart: unless-stopped
+    depends_on:
+      - raw-postgres
+    ports:
+      - "8002:8002"
+    environment:
+      S1_DATABASE_URL: postgresql://mluser:mlpass@raw-postgres:5432/rawdb
 
   api:
     build:
@@ -21,15 +45,36 @@ services:
     container_name: fpl_api
     restart: unless-stopped
     depends_on:
-      - postgres
+      - raw-postgres
+      - feature-postgres
+      - raw-api
+      - preprocessing
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://mluser:mlpass@postgres:5432/fpldb
+      S1_BASE_URL: http://raw-api:8002
+      S2_BASE_URL: http://preprocessing:8001
       MODEL_BASE_DIR: /models
       MODEL_POLL_SECONDS: 10
     volumes:
       - ./models:/models
+
+  preprocessing:
+    build:
+      context: .
+      dockerfile: src/S2/Dockerfile
+    container_name: fpl_preprocessing
+    restart: unless-stopped
+    depends_on:
+      - raw-postgres
+      - feature-postgres
+      - raw-api
+    ports:
+      - "8001:8001"
+    environment:
+      S2_DATABASE_URL: postgresql://mluser:mlpass@feature-postgres:5432/featuredb
+      S1_BASE_URL: http://raw-api:8002
+      FEATURE_TABLE_NAME: player_data
 
   trainer:
     build:
@@ -39,12 +84,14 @@ services:
     profiles:
       - trainer
     depends_on:
-      - postgres
+      - feature-postgres
+      - preprocessing
     environment:
-      DATABASE_URL: postgresql://mluser:mlpass@postgres:5432/fpldb
+      S2_BASE_URL: http://preprocessing:8001
       MODEL_BASE_DIR: /models
     volumes:
       - ./models:/models
 
 volumes:
-  postgres_data:
+  raw_postgres_data:
+  feature_postgres_data:

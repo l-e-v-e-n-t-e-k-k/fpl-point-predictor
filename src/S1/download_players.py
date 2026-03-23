@@ -1,14 +1,14 @@
 #download_players.py
 import time
 from S1.data_utils import download_json
-from shared.db.connection import engine
+from shared.db.connection import raw_engine
 import pandas as pd
 
 BASE_URL = "https://fantasy.premierleague.com/api/element-summary/{id}/"
 
 
 def load_player_ids():
-    df = pd.read_sql("SELECT id FROM raw.players ORDER BY id", engine)
+    df = pd.read_sql("SELECT id FROM raw.players ORDER BY id", raw_engine)
     return df["id"].tolist()
 
 
@@ -66,7 +66,7 @@ def save_history(rows: list):
 
     df.to_sql(
         "player_history",
-        engine,
+        raw_engine,
         schema="raw",
         if_exists="append",
         index=False

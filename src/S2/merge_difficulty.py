@@ -1,37 +1,36 @@
+import os
 from pathlib import Path
+
 import pandas as pd
 import numpy as np
-from shared.db.connection import engine
+
+from shared.http.json_client import fetch_url
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
 RAW_PATH = PROCESSED_DIR / "current_season_raw.csv"
 OUT_PATH = PROCESSED_DIR / "current_season_with_difficulty.csv"
+S1_BASE_URL = os.getenv("S1_BASE_URL", "").strip()
+
+
+def load_fixtures_df():
+    if not S1_BASE_URL:
+        raise RuntimeError("S1_BASE_URL is required for S2 fixture loading")
+
+    payload = fetch_url(S1_BASE_URL, "fixtures")
+    data = payload.get("data", [])
+    return pd.DataFrame(data)
 
 
 def merge_difficulty(df: pd.DataFrame):
-    fixtures_df = pd.read_sql(
-        """
-        SELECT
-            id,
-            event,
-            kickoff_time,
-            team_h,
-            team_a,
-            team_h_difficulty,
-            team_a_difficulty,
-            finished
-        FROM raw.fixtures
-        """,
-        engine
-    )
+    fixtures_df = load_fixtures_df()
 
     df = df.merge(
         fixtures_df,
         left_on="fixture",
         right_on="id",
-        how="left"
+        how="left",
     )
 
     # Own team difficulty
@@ -91,8 +90,7 @@ def merge_difficulty(df: pd.DataFrame):
     for idx in df.index[missing_mask]:
         row = df.loc[idx]
 
-        team_id = row["team_h"] if row["was_home"] else row["team_a"]
-        next_diff = next_fixture_by_team.get(team_id)
+        next_diff = next_fixture_by_team.get(row["team_id"])
 
         if next_diff is None:
             continue
@@ -110,13 +108,12 @@ def merge_difficulty(df: pd.DataFrame):
             "id",
             "event",
             "kickoff_time",
-            "team_h",
-            "team_a",
             "team_h_difficulty",
             "team_a_difficulty",
             "finished",
             "opponent_team",
-        ]
+        ],
+        errors="ignore",
     )
 
     return df

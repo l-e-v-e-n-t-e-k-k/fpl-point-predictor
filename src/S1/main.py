@@ -8,7 +8,8 @@ from S1.fpl_api import (
 )
 from S1.init_db import init_db
 
-if __name__ == "__main__":
+
+def run_pipeline():
     init_db()
 
     data = fetch_bootstrap_static()
@@ -21,4 +22,15 @@ if __name__ == "__main__":
     player_ids = load_player_ids()
     rows = collect_history_rows(player_ids)
     save_history(rows)
-    
+
+    return {
+        "status": "ok",
+        "teams": len(data["teams"]),
+        "players": len(data["elements"]),
+        "history_rows": len(rows),
+        "fixtures": len(fixtures),
+    }
+
+
+if __name__ == "__main__":
+    run_pipeline()
