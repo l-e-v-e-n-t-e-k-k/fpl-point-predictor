@@ -7,6 +7,7 @@ import time
 
 from pathlib import Path
 from fastapi import FastAPI
+from fastapi import HTTPException
 from shared.http.json_client import fetch_url
 
 app = FastAPI()
@@ -134,6 +135,39 @@ def load_model():
     if MODEL_POLL_SECONDS > 0:
         watcher = threading.Thread(target=model_watcher, daemon=True)
         watcher.start()
+
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok", "service": "s4-prediction-api"}
+
+
+@app.get("/readyz")
+def readyz():
+    if not S1_BASE_URL:
+        raise HTTPException(status_code=503, detail="S1_BASE_URL is not configured")
+
+    if not S2_BASE_URL:
+        raise HTTPException(status_code=503, detail="S2_BASE_URL is not configured")
+
+    with model_lock:
+        model_loaded = model is not None
+        current_model_version = current_version
+
+    if not model_loaded:
+        raise HTTPException(status_code=503, detail="model is not loaded")
+
+    try:
+        fetch_url(S1_BASE_URL, "/healthz")
+        fetch_url(S2_BASE_URL, "/healthz")
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"dependency not ready: {exc}") from exc
+
+    return {
+        "status": "ready",
+        "service": "s4-prediction-api",
+        "model_version": current_model_version,
+    }
 
 
 # ---- prediction endpoint ----

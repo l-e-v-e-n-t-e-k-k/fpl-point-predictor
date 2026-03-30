@@ -1,3 +1,4 @@
+import http
 import json
 import os
 from pathlib import Path
@@ -36,16 +37,28 @@ FEATURE_COLS = [
 ]
 
 TARGET_COL = "target_next_gw"
-S2_BASE_URL = os.getenv("S2_BASE_URL", "").strip()
+S2_BASE_URL = "http://localhost:8001"
+#S2_BASE_URL = os.getenv("S2_BASE_URL", "").strip()
 
 
-def load_feature_df() -> pd.DataFrame:
+def load_feature_dataset():
     if not S2_BASE_URL:
         raise RuntimeError("S2_BASE_URL is required for trainer feature loading")
 
-    payload = fetch_url(S2_BASE_URL, "/player-data")
+    payload = fetch_url(S2_BASE_URL, "/training-dataset")
     data = payload.get("data", [])
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+
+    dataset_metadata = {
+        "service": "S2",
+        "base_url": S2_BASE_URL,
+        "source_endpoint": payload.get("source_endpoint", "/training-dataset"),
+        "feature_table": payload.get("feature_table"),
+        "row_count": payload.get("row_count", len(df)),
+        "columns": payload.get("columns", list(df.columns)),
+    }
+
+    return df, dataset_metadata
 
 
 # ---- Rolling GW split (season-aware) ----
@@ -118,9 +131,9 @@ def write_json_atomic(path: Path, payload: dict):
         json.dump(payload, f, indent=2)
     tmp_path.replace(path)
 
-def main(logs=False):
+def main(logs=True):
 
-    df = load_feature_df()
+    df, dataset_metadata = load_feature_dataset()
     # ---- last gameweek drop ----
     df = df.dropna(subset=["target_next_gw", "next_opponent_difficulty"])
 
@@ -207,6 +220,11 @@ def main(logs=False):
         "best_model_name": best_model_name,
         "model_type": type(best_model).__name__,
         "feature_cols": FEATURE_COLS,
+        "training_data_source": {
+            **dataset_metadata,
+            "rows_after_dropna": len(df),
+            "target_column": TARGET_COL,
+        },
         "metrics": {
             "lr": {"mae": lr_results["MAE"], "rmse": lr_results["RMSE"]},
             "rf": {"mae": rf_results["MAE"], "rmse": rf_results["RMSE"]},

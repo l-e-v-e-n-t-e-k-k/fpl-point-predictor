@@ -3,6 +3,8 @@ import json
 
 import pandas as pd
 from fastapi import FastAPI
+from fastapi import HTTPException
+from sqlalchemy import text
 
 from S2.add_target import add_target, save_supervised
 from S2.build_dataset_multiseason import build_multiseason, save_multiseason, save_multiseason_db
@@ -48,17 +50,34 @@ def run_pipeline():
 def healthz():
     return {"status": "ok", "feature_table": FEATURE_TABLE_NAME, "db_role": "feature"}
 
-# --- S3 endpoint ---
-@app.get("/player-data")
-def get_player_data(limit: int | None = None):
+
+@app.get("/readyz")
+def readyz():
+    try:
+        with feature_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"feature db not ready: {exc}") from exc
+
+    return {"status": "ready", "feature_table": FEATURE_TABLE_NAME, "db_role": "feature"}
+
+#  --- S3 endpoint ---
+@app.get("/training-dataset")
+def get_training_dataset(limit: int | None = None):
     df = pd.read_sql(f"SELECT * FROM {FEATURE_TABLE_NAME}", feature_engine)
 
     if limit is not None:
         df = df.head(limit)
 
-    return {"data": items(df)}
+    return {
+        "source_endpoint": "/training-dataset",
+        "feature_table": FEATURE_TABLE_NAME,
+        "row_count": len(df),
+        "columns": list(df.columns),
+        "data": items(df),
+    }
 
-# --- S4 endpoint ---
+#  --- S4 endpoint ---
 @app.get("/player-data/latest")
 def get_latest_player_data():
     query = f"""

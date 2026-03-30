@@ -2,6 +2,8 @@ import json
 
 import pandas as pd
 from fastapi import FastAPI
+from fastapi import HTTPException
+from sqlalchemy import text
 
 from S1.main import run_pipeline
 from shared.db.connection import raw_engine
@@ -87,6 +89,17 @@ def player_meta_df():
 @app.get("/healthz")
 def healthz():
     return {"status": "ok", "db_role": "raw"}
+
+
+@app.get("/readyz")
+def readyz():
+    try:
+        with raw_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"raw db not ready: {exc}") from exc
+
+    return {"status": "ready", "db_role": "raw"}
 
 
 @app.post("/run")
