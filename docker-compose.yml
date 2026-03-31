@@ -38,27 +38,6 @@ services:
     environment:
       S1_DATABASE_URL: postgresql://mluser:mlpass@raw-postgres:5432/rawdb
 
-  api:
-    build:
-      context: .
-      dockerfile: src/S4/Dockerfile
-    container_name: fpl_api
-    restart: unless-stopped
-    depends_on:
-      - raw-postgres
-      - feature-postgres
-      - raw-api
-      - preprocessing
-    ports:
-      - "8000:8000"
-    environment:
-      S1_BASE_URL: http://raw-api:8002
-      S2_BASE_URL: http://preprocessing:8001
-      MODEL_BASE_DIR: /models
-      MODEL_POLL_SECONDS: 10
-    volumes:
-      - ./models:/models
-
   preprocessing:
     build:
       context: .
@@ -89,6 +68,33 @@ services:
     environment:
       S2_BASE_URL: http://preprocessing:8001
       MODEL_BASE_DIR: /models
+      TRAIN_SPLIT_RATIO: 0.7
+      TRAIN_RANDOM_SEED: 42
+      RF_N_ESTIMATORS: 300
+      RF_MAX_DEPTH: 10
+      RF_MIN_SAMPLES_LEAF: 5
+      BASELINE_STRATEGY: mean
+    volumes:
+      - ./models:/models
+
+  predict-api:
+    build:
+      context: .
+      dockerfile: src/S4/Dockerfile
+    container_name: fpl_api
+    restart: unless-stopped
+    depends_on:
+      - raw-postgres
+      - feature-postgres
+      - raw-api
+      - preprocessing
+    ports:
+      - "8000:8000"
+    environment:
+      S1_BASE_URL: http://raw-api:8002
+      S2_BASE_URL: http://preprocessing:8001
+      MODEL_BASE_DIR: /models
+      MODEL_POLL_SECONDS: 10
     volumes:
       - ./models:/models
 

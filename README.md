@@ -166,6 +166,39 @@ Felelősség:
 - baseline és jelölt modellek kiértékelése
 - verziózott modellfájlok és metaadatok mentése a `models/` könyvtárba
 
+Megjegyzés:
+
+- a fontosabb training beállítások, például a split arány és a random forest paraméterei env változókból is állíthatók
+- ezek nem a Dockerfile-ba lettek írva, hanem futási konfigurációként kezeli őket, mert így image újraépítése nélkül is változtathatók
+
+##### Hogyan működik a train/test split?
+
+A megoldásban a training nem véletlenszerű splitet használ, hanem szezononként gameweek alapú, időrendi szétválasztást.
+
+Ez gyakorlatban azt jelenti, hogy:
+
+- minden szezonon belül a korábbi gameweekek kerülnek a train részbe
+- a későbbi gameweekek kerülnek a test részbe
+- a split aránya jelenleg alapértelmezés szerint `70% / 30%`
+- a pontos split információk a `metadata.json` fájlba is bekerülnek
+
+Miért ezt választottam?
+
+- a modellnek a múltból kell tanulnia, és későbbi fordulókra kell becslést adnia
+- mivel jelenleg csak néhány modellt hasonlítok össze, és nincs hiperparaméter keresés, a külön validation split helyett még egyszerűbben oldottam meg
+
+Adatszivárgás elleni döntések:
+
+- nem véletlenszerű módon keverem össze az összes sort, hanem időrendben választom szét az adatot
+- a test rész mindig későbbi gameweekekből áll, mint a train rész
+- a rolling jellegű feature-ök korábbi mérkőzésekből készülnek, nem a jövőből
+- a target a következő gameweek pontszáma, ezért a legutolsó, target nélkül maradó sorok ki vannak szűrve a tanítás előtt
+- a scaler csak a train adaton van illesztve, és utána kerül alkalmazásra a test adaton
+
+Későbbi fejlesztési irány:
+
+- ha később több modellcsalád vagy komolyabb hiperparaméter hangolás kerülne be, akkor érdemes külön validation splitet bevezetni
+
 ##### Miért van modellverziózás?
 
 A projektben a modellek nem egyetlen fájlként vannak felülírva, hanem minden tanítás külön verzióként mentődik el a `models/` könyvtárba.
@@ -175,7 +208,7 @@ Egy verzióhoz tartozik:
 - a kiválasztott production modell
 - a scaler
 - a többi elmentett összehasonlító modell
-- a `metadata.json`, amely tartalmazza a modell típusát, a metricákat, a feature oszlopokat és a tanítási adatforrást
+- a `metadata.json`, amely tartalmazza a modell típusát, a metricákat, a feature oszlopokat, a tanítási adatforrást és a tanítás hiperparamétereit.
 - a `latest.json`, amely megmondja, hogy jelenleg melyik verzió az aktív modell
 
 Miért hasznos ez?
@@ -210,13 +243,13 @@ Fő fájlok:
 Felelősség:
 
 - a legfrissebb production modell betöltése
+- háttérszálon figyeli, hogy érkezett-e új modellverzió, és ha igen, újratölti azt
 - player metadata lekérése az `S1`-től
 - legfrissebb feature sorok lekérése az `S2`-től
 - predikciók kiszolgálása HTTP API-n keresztül
 
 ## API végpontok
-
-Az alábbi végpontok a jelenlegi szolgáltatásokban érhetők el.
+Kuberneteshez készült endpointok: 
 
 A `healthz` és `readyz` végpontok célja nem ugyanaz:
 
@@ -267,6 +300,36 @@ Megjegyzés:
 - ez a publikus belépési pont a rendszerhez
 - az `S4` a háttérben az `S1`-től metadata-t, az `S2`-től feature adatot, a `models/` könyvtárból pedig az aktuális modellt tölti be
 
+## Hibakezelés és logolás
+
+A service-ekben van egyszerű hibakezelés és alap logolás is.
+
+Mit jelent nálam a hibakezelés?
+
+- ha egy lekérdezés vagy pipeline lépés hibára fut, a service nem nyers Python hibát ad vissza
+- helyette érthető HTTP hibaválaszt küld, például `500` vagy `503` státusszal
+- a `readyz` végpontok azt ellenőrzik, hogy a service tényleg használható-e
+- az `S1` és `S2` a saját adatbázisuk elérését ellenőrzi
+- az `S4` azt ellenőrzi, hogy a modell be van-e töltve, és az `S1` valamint `S2` elérhető-e
+
+Miért fontos ez?
+
+- könnyebb észrevenni, hogy pontosan mi romlott el
+- hibakeresésnél gyorsabban el lehet különíteni a belső hibát, az adatbázis hibát és a függő service hibát
+
+Mit jelent nálam a logolás?
+
+- a fontosabb műveletekről egyszerű `INFO` és `ERROR` logok készülnek
+- a logok jelzik például:
+  - mikor indult el vagy fejeződött be egy pipeline
+  - hány sort adott vissza egy adatlekérdezés
+  - mikor töltődött be egy modell
+  - mikor futott hibára egy predikció vagy lekérdezés
+
+Az vele a cél, hogy a service-ek működése követhetőbb legyen.
+
+A Pydantic modelleket arra használtam, hogy a fontosabb API-válaszoknak legyen egy előre definiált szerkezete. Így nem ad hoc dictionary-ket adnak vissza a service-ek, hanem dokumentált és ellenőrizhető response formátumokat. Ez segít abban, hogy az endpointok tisztábbak legyenek, a FastAPI jobb dokumentációt generáljon, és kisebb legyen a hibázás esélye. Nem modelleztem túl az egész rendszert, csak a fontosabb végpontoknál használtam, mint például a '/healthz' vagy '/readyz' endpointok , hogy megmaradjon az egyszerűség is.
+
 ## Jelenlegi Docker Compose megfeleltetés
 
 | Compose service | Architektúra szerinti szerep |
@@ -278,6 +341,7 @@ Megjegyzés:
 | `raw-postgres` | `S1` privát nyers adattár |
 | `feature-postgres` | `S2` privát feature adattár |
 
+- a `requirements.txt` fájlokban a dependency verziók pinelve vannak, hogy a futási környezet reprodukálhatóbb legyen
 
 ## Lokális futtatás
 

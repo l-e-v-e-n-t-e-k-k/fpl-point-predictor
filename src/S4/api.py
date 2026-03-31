@@ -1,23 +1,27 @@
 import json
 import joblib
+import logging
 import os
 import pandas as pd
 import threading
 import time
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi import HTTPException
+from pydantic import BaseModel
 from shared.http.json_client import fetch_url
 
-app = FastAPI()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("S4")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = Path(os.getenv("MODEL_BASE_DIR", str(PROJECT_ROOT / "models")))
 LATEST_METADATA_PATH = MODEL_DIR / "latest.json"
 MODEL_POLL_SECONDS = float(os.getenv("MODEL_POLL_SECONDS", "10"))
-S1_BASE_URL = os.getenv("S1_BASE_URL", "").strip()
-S2_BASE_URL = os.getenv("S2_BASE_URL", "").strip()
+S1_BASE_URL = os.getenv("S1_BASE_URL", "http://localhost:8002").strip()
+S2_BASE_URL = os.getenv("S2_BASE_URL", "http://localhost:8001").strip()
 
 TOP_K = 20
 
@@ -27,6 +31,26 @@ feature_cols = []
 player_meta = {}
 current_version = None
 model_lock = threading.Lock()
+
+
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+
+
+class PlayerPrediction(BaseModel):
+    rank: int
+    player: str
+    team: str
+    position: str
+    price: float
+    predicted_points: float
+
+
+class PredictResponse(BaseModel):
+    gw: int
+    top_players: list[PlayerPrediction]
+    top_by_position: dict[str, list[PlayerPrediction]]
 
 
 # ---- helper functions ----
@@ -114,7 +138,7 @@ def load_model_artifacts():
         player_meta = loaded_player_meta
         current_version = latest["version"]
 
-    print(f"Model loaded: {latest['version']} ({latest['model_type']})")
+    logger.info("S4 model loaded: %s (%s)", latest["version"], latest["model_type"])
     return True
 
 
@@ -123,21 +147,24 @@ def model_watcher():
         try:
             load_model_artifacts()
         except Exception as exc:
-            print(f"Model reload error: {exc}")
+            logger.error("S4 model reload failed: %s", exc)
         time.sleep(MODEL_POLL_SECONDS)
 
-
-# ---- startup ----
-@app.on_event("startup")
-def load_model():
+# --- Fastapi startup ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     load_model_artifacts()
 
     if MODEL_POLL_SECONDS > 0:
         watcher = threading.Thread(target=model_watcher, daemon=True)
         watcher.start()
 
+    yield
 
-@app.get("/healthz")
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/healthz", response_model=HealthResponse)
 def healthz():
     return {"status": "ok", "service": "s4-prediction-api"}
 
@@ -171,93 +198,59 @@ def readyz():
 
 
 # ---- prediction endpoint ----
-@app.get("/predict")
+@app.get("/predict", response_model=PredictResponse)
 def predict():
-    with model_lock:
-        loaded_model = model
-        loaded_scaler = scaler
-        loaded_feature_cols = list(feature_cols)
-        loaded_player_meta = dict(player_meta)
+    try:
+        with model_lock:
+            loaded_model = model
+            loaded_scaler = scaler
+            loaded_feature_cols = list(feature_cols)
+            loaded_player_meta = dict(player_meta)
 
-    if loaded_model is None:
-        raise RuntimeError("Model is not loaded")
+        if loaded_model is None:
+            raise HTTPException(status_code=503, detail="Model is not loaded.")
 
-    if not S2_BASE_URL:
-        raise RuntimeError("S2_BASE_URL is required for API prediction loading")
+        if not S2_BASE_URL:
+            raise HTTPException(status_code=503, detail="S2 service URL is not configured.")
 
-    payload = fetch_url(S2_BASE_URL, "/player-data/latest")
-    data = payload.get("data", [])
-    df = pd.DataFrame(data)
+        payload = fetch_url(S2_BASE_URL, "/player-data/latest")
+        data = payload.get("data", [])
+        df = pd.DataFrame(data)
 
-    latest_season = df["season"].max()
-    latest_gw = df[df["season"] == latest_season]["GW"].max()
+        if df.empty:
+            raise HTTPException(status_code=503, detail="No feature data is available for prediction.")
 
-    next_gw_df = df[
-        (df["season"] == latest_season) &
-        (df["GW"] == latest_gw)
-    ].copy()
+        latest_season = df["season"].max()
+        latest_gw = df[df["season"] == latest_season]["GW"].max()
 
-    X_next = next_gw_df[loaded_feature_cols]
+        next_gw_df = df[
+            (df["season"] == latest_season) &
+            (df["GW"] == latest_gw)
+        ].copy()
 
-    if "LinearRegression" in str(type(loaded_model)):
-        X_next = loaded_scaler.transform(X_next)
+        X_next = next_gw_df[loaded_feature_cols]
 
-    preds = loaded_model.predict(X_next)
+        if "LinearRegression" in str(type(loaded_model)):
+            X_next = loaded_scaler.transform(X_next)
 
-    next_gw_df["predicted_points"] = preds
+        preds = loaded_model.predict(X_next)
+        next_gw_df["predicted_points"] = preds
 
-    top_players = next_gw_df.sort_values(
-        "predicted_points", ascending=False
-    ).head(TOP_K)
-
-    next_gw = latest_gw + 1
-
-    # ---- top players ----
-    top_results = []
-
-    for i, row in enumerate(top_players.itertuples(), start=1):
-
-        player_name = getattr(row, "name")
-
-        meta = loaded_player_meta.get(
-            normalize_name(player_name),
-            {"team": "Unknown", "pos": "", "price": 0, "web_name": player_name}
-        )
-
-        top_results.append({
-            "rank": i,
-            "player": meta["web_name"],
-            "team": meta["team"],
-            "position": meta["pos"],
-            "price": meta["price"],
-            "predicted_points": float(row.predicted_points)
-        })
-
-    # ---- position results ----
-    positions = ["GKP", "DEF", "MID", "FWD"]
-
-    position_results = {}
-
-    for pos in positions:
-
-        pos_df = next_gw_df[next_gw_df["position"] == pos]
-
-        top_pos = pos_df.sort_values(
+        top_players = next_gw_df.sort_values(
             "predicted_points", ascending=False
-        ).head(3)
+        ).head(TOP_K)
 
-        pos_list = []
+        next_gw = latest_gw + 1
+        top_results = []
 
-        for i, row in enumerate(top_pos.itertuples(), start=1):
-
+        for i, row in enumerate(top_players.itertuples(), start=1):
             player_name = getattr(row, "name")
-
             meta = loaded_player_meta.get(
                 normalize_name(player_name),
                 {"team": "Unknown", "pos": "", "price": 0, "web_name": player_name}
             )
 
-            pos_list.append({
+            top_results.append({
                 "rank": i,
                 "player": meta["web_name"],
                 "team": meta["team"],
@@ -266,10 +259,43 @@ def predict():
                 "predicted_points": float(row.predicted_points)
             })
 
-        position_results[pos] = pos_list
+        positions = ["GKP", "DEF", "MID", "FWD"]
+        position_results = {}
 
-    return {
-        "gw": int(next_gw),
-        "top_players": top_results,
-        "top_by_position": position_results
-    }
+        for pos in positions:
+            pos_df = next_gw_df[next_gw_df["position"] == pos]
+            top_pos = pos_df.sort_values(
+                "predicted_points", ascending=False
+            ).head(3)
+
+            pos_list = []
+
+            for i, row in enumerate(top_pos.itertuples(), start=1):
+                player_name = getattr(row, "name")
+                meta = loaded_player_meta.get(
+                    normalize_name(player_name),
+                    {"team": "Unknown", "pos": "", "price": 0, "web_name": player_name}
+                )
+
+                pos_list.append({
+                    "rank": i,
+                    "player": meta["web_name"],
+                    "team": meta["team"],
+                    "position": meta["pos"],
+                    "price": meta["price"],
+                    "predicted_points": float(row.predicted_points)
+                })
+
+            position_results[pos] = pos_list
+
+        logger.info("S4 prediction completed GW=%s top_players=%s", next_gw, len(top_results))
+        return {
+            "gw": int(next_gw),
+            "top_players": top_results,
+            "top_by_position": position_results
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("S4 prediction failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Prediction failed.") from exc

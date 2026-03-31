@@ -1,0 +1,72 @@
+{
+  "version": "v20260330_191958",
+  "created_at": "2026-03-30T19:19:58.837179+00:00",
+  "best_model_name": "rf",
+  "model_type": "RandomForestRegressor",
+  "feature_cols": [
+    "avg_pts_last3",
+    "avg_min_last3",
+    "avg_pts_last5",
+    "avg_min_last5",
+    "expected_goals",
+    "expected_assists",
+    "avg_xgi_last5",
+    "expected_goals_conceded",
+    "clean_sheets_last5",
+    "saves",
+    "bps",
+    "next_team_difficulty",
+    "next_opponent_difficulty"
+  ],
+  "training_data_source": {
+    "service": "S2",
+    "base_url": "http://localhost:8001",
+    "source_endpoint": "/training-dataset",
+    "feature_table": "player_data",
+    "row_count": 46007,
+    "columns": [
+      "season",
+      "name",
+      "position",
+      "GW",
+      "minutes",
+      "total_points",
+      "expected_goals",
+      "expected_assists",
+      "expected_goals_conceded",
+      "clean_sheets",
+      "saves",
+      "bps",
+      "value",
+      "team_difficulty",
+      "opponent_difficulty",
+      "is_home",
+      "target_next_gw",
+      "next_team_difficulty",
+      "next_opponent_difficulty",
+      "avg_pts_last3",
+      "avg_min_last3",
+      "avg_pts_last5",
+      "avg_min_last5",
+      "xgi",
+      "avg_xgi_last5",
+      "clean_sheets_last5"
+    ],
+    "rows_after_dropna": 43852,
+    "target_column": "target_next_gw"
+  },
+  "metrics": {
+    "lr": {
+      "mae": 1.6747653391651915,
+      "rmse": 2.5342056405990565
+    },
+    "rf": {
+      "mae": 1.6064575230923532,
+      "rmse": 2.509310345985038
+    },
+    "baseline": {
+      "mae": 1.9480328758731713,
+      "rmse": 2.833036101649323
+    }
+  }
+}

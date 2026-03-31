@@ -1,9 +1,11 @@
 import os
 import json
+import logging
 
 import pandas as pd
 from fastapi import FastAPI
 from fastapi import HTTPException
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from S2.add_target import add_target, save_supervised
@@ -13,9 +15,25 @@ from S2.merge_difficulty import merge_difficulty, save_with_difficulty
 from shared.db.connection import feature_engine
 
 app = FastAPI()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("S2")
 
 FEATURE_TABLE_NAME = os.getenv("FEATURE_TABLE_NAME", "player_data")
 SAVE_LOCAL = os.getenv("SAVE_LOCAL", "false").lower() == "true"
+
+
+class HealthResponse(BaseModel):
+    status: str
+    feature_table: str
+    db_role: str
+
+
+class TrainingDatasetResponse(BaseModel):
+    source_endpoint: str
+    feature_table: str
+    row_count: int
+    columns: list[str]
+    data: list[dict]
 
 
 def items(df: pd.DataFrame):
@@ -46,12 +64,12 @@ def run_pipeline():
     }
 
 
-@app.get("/healthz")
+@app.get("/healthz", response_model=HealthResponse)
 def healthz():
     return {"status": "ok", "feature_table": FEATURE_TABLE_NAME, "db_role": "feature"}
 
 
-@app.get("/readyz")
+@app.get("/readyz", response_model=HealthResponse)
 def readyz():
     try:
         with feature_engine.connect() as conn:
@@ -62,20 +80,25 @@ def readyz():
     return {"status": "ready", "feature_table": FEATURE_TABLE_NAME, "db_role": "feature"}
 
 #  --- S3 endpoint ---
-@app.get("/training-dataset")
+@app.get("/training-dataset", response_model=TrainingDatasetResponse)
 def get_training_dataset(limit: int | None = None):
-    df = pd.read_sql(f"SELECT * FROM {FEATURE_TABLE_NAME}", feature_engine)
+    try:
+        df = pd.read_sql(f"SELECT * FROM {FEATURE_TABLE_NAME}", feature_engine)
 
-    if limit is not None:
-        df = df.head(limit)
+        if limit is not None:
+            df = df.head(limit)
 
-    return {
-        "source_endpoint": "/training-dataset",
-        "feature_table": FEATURE_TABLE_NAME,
-        "row_count": len(df),
-        "columns": list(df.columns),
-        "data": items(df),
-    }
+        logger.info("S2 training-dataset rows: %s", len(df))
+        return {
+            "source_endpoint": "/training-dataset",
+            "feature_table": FEATURE_TABLE_NAME,
+            "row_count": len(df),
+            "columns": list(df.columns),
+            "data": items(df),
+        }
+    except Exception as exc:
+        logger.error("S2 training-dataset query failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to query training dataset.") from exc
 
 #  --- S4 endpoint ---
 @app.get("/player-data/latest")
@@ -94,10 +117,22 @@ def get_latest_player_data():
         )
     )
     """
-    df = pd.read_sql(query, feature_engine)
-    return {"data": items(df)}
+    try:
+        df = pd.read_sql(query, feature_engine)
+        logger.info("S2 latest feature rows: %s", len(df))
+        return {"data": items(df)}
+    except Exception as exc:
+        logger.error("S2 latest feature query failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to query latest feature data.") from exc
 
 
 @app.post("/run")
 def run():
-    return run_pipeline()
+    try:
+        logger.info("S2 pipeline started")
+        result = run_pipeline()
+        logger.info("S2 pipeline finished: %s", result)
+        return result
+    except Exception as exc:
+        logger.error("S2 pipeline failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Feature pipeline execution failed.") from exc

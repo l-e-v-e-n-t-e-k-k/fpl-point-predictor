@@ -36,9 +36,16 @@ FEATURE_COLS = [
     "next_opponent_difficulty"
 ]
 
+# --- Config parameters ---
 TARGET_COL = "target_next_gw"
-S2_BASE_URL = "http://localhost:8001"
-#S2_BASE_URL = os.getenv("S2_BASE_URL", "").strip()
+S2_BASE_URL = os.getenv("S2_BASE_URL", "http://localhost:8001").strip()
+
+TRAIN_SPLIT_RATIO = float(os.getenv("TRAIN_SPLIT_RATIO", "0.7"))
+TRAIN_RANDOM_SEED = int(os.getenv("TRAIN_RANDOM_SEED", "42"))
+RF_N_ESTIMATORS = int(os.getenv("RF_N_ESTIMATORS", "300"))
+RF_MAX_DEPTH = int(os.getenv("RF_MAX_DEPTH", "10"))
+RF_MIN_SAMPLES_LEAF = int(os.getenv("RF_MIN_SAMPLES_LEAF", "5"))
+BASELINE_STRATEGY = os.getenv("BASELINE_STRATEGY", "mean").strip()
 
 
 def load_feature_dataset():
@@ -72,6 +79,7 @@ def rolling_gw_split(df, split_ratio=0.7, logs=False):
 
     train_parts = []
     test_parts = []
+    split_summary = []
 
     for season, season_df in df.groupby("season"):
 
@@ -83,6 +91,13 @@ def rolling_gw_split(df, split_ratio=0.7, logs=False):
 
         train_parts.append(train_part)
         test_parts.append(test_part)
+        split_summary.append({
+            "season": season,
+            "max_gw": int(max_gw),
+            "split_gw": int(split_gw),
+            "train_rows": int(len(train_part)),
+            "test_rows": int(len(test_part)),
+        })
 
         if logs:
             print(f"{season}: max_gw={max_gw}, split_gw={split_gw}")
@@ -90,7 +105,7 @@ def rolling_gw_split(df, split_ratio=0.7, logs=False):
     train_df = pd.concat(train_parts)
     test_df = pd.concat(test_parts)
 
-    return train_df, test_df
+    return train_df, test_df, split_summary
 
 
 # ---- Metrics ----
@@ -140,7 +155,8 @@ def main(logs=True):
     #df_model = df.dropna(subset=["avg_pts_last5"])
     #df_model = df_model[df_model["avg_min_last5"] >= 0.0]
 
-    train_df, test_df = rolling_gw_split(df, split_ratio=0.7, logs=logs)
+    split_ratio = TRAIN_SPLIT_RATIO
+    train_df, test_df, split_summary = rolling_gw_split(df, split_ratio=split_ratio, logs=logs)
 
     X_train = train_df[FEATURE_COLS]   
     y_train = train_df[TARGET_COL]
@@ -167,11 +183,16 @@ def main(logs=True):
     lr_results = evaluate_model(lr, X_train_scaled, y_train, X_test_scaled, y_test)
 
     # ---- Random Forest Regressor ----
-    rf = RandomForestRegressor(n_estimators=300, random_state=42, max_depth=10, min_samples_leaf=5)
+    rf = RandomForestRegressor(
+        n_estimators=RF_N_ESTIMATORS,
+        random_state=TRAIN_RANDOM_SEED,
+        max_depth=RF_MAX_DEPTH,
+        min_samples_leaf=RF_MIN_SAMPLES_LEAF,
+    )
     rf_results = evaluate_model(rf, X_train, y_train, X_test, y_test)
 
     # ---- Mean Baseline ----
-    baseline = DummyRegressor(strategy="mean")
+    baseline = DummyRegressor(strategy=BASELINE_STRATEGY)
     baseline_results = evaluate_model(baseline, X_train, y_train, X_test, y_test)
 
     models = {
@@ -223,7 +244,22 @@ def main(logs=True):
         "training_data_source": {
             **dataset_metadata,
             "rows_after_dropna": len(df),
+        },
+        "train_test_split": {
+            "method": "season-aware rolling GW split",
+            "split_ratio": split_ratio,
+            "train_rows": len(train_df),
+            "test_rows": len(test_df),
+            "season_summaries": split_summary,
+        },
+        "training_config": {
             "target_column": TARGET_COL,
+            "train_split_ratio": TRAIN_SPLIT_RATIO,
+            "train_random_seed": TRAIN_RANDOM_SEED,
+            "rf_n_estimators": RF_N_ESTIMATORS,
+            "rf_max_depth": RF_MAX_DEPTH,
+            "rf_min_samples_leaf": RF_MIN_SAMPLES_LEAF,
+            "baseline_strategy": BASELINE_STRATEGY,
         },
         "metrics": {
             "lr": {"mae": lr_results["MAE"], "rmse": lr_results["RMSE"]},

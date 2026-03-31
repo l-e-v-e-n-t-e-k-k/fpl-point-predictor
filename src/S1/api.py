@@ -1,14 +1,23 @@
 import json
+import logging
 
 import pandas as pd
 from fastapi import FastAPI
 from fastapi import HTTPException
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from S1.main import run_pipeline
 from shared.db.connection import raw_engine
 
 app = FastAPI()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("S1")
+
+
+class HealthResponse(BaseModel):
+    status: str
+    db_role: str
 
 
 def items(df: pd.DataFrame):
@@ -86,12 +95,12 @@ def player_meta_df():
     return pd.read_sql(query, raw_engine)
 
 
-@app.get("/healthz")
+@app.get("/healthz", response_model=HealthResponse)
 def healthz():
     return {"status": "ok", "db_role": "raw"}
 
 
-@app.get("/readyz")
+@app.get("/readyz", response_model=HealthResponse)
 def readyz():
     try:
         with raw_engine.connect() as conn:
@@ -104,22 +113,44 @@ def readyz():
 
 @app.post("/run")
 def run():
-    return run_pipeline()
+    try:
+        logger.info("S1 pipeline started")
+        result = run_pipeline()
+        logger.info("S1 pipeline finished: %s", result)
+        return result
+    except Exception as exc:
+        logger.error("S1 pipeline failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Ingestion pipeline execution failed.") from exc
 
 
 @app.get("/current-season")
 def get_current_season():
-    df = current_season_df()
-    return {"data": items(df)}
+    try:
+        df = current_season_df()
+        logger.info("S1 current-season rows: %s", len(df))
+        return {"data": items(df)}
+    except Exception as exc:
+        logger.error("S1 current-season query failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to query current season data.") from exc
 
 
 @app.get("/fixtures")
 def get_fixtures():
-    df = fixtures_df()
-    return {"data": items(df)}
+    try:
+        df = fixtures_df()
+        logger.info("S1 fixtures rows: %s", len(df))
+        return {"data": items(df)}
+    except Exception as exc:
+        logger.error("S1 fixtures query failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to query fixture data.") from exc
 
 
 @app.get("/player-meta")
 def get_player_meta():
-    df = player_meta_df()
-    return {"data": items(df)}
+    try:
+        df = player_meta_df()
+        logger.info("S1 player-meta rows: %s", len(df))
+        return {"data": items(df)}
+    except Exception as exc:
+        logger.error("S1 player-meta query failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to query player metadata.") from exc

@@ -11,7 +11,7 @@ PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
 RAW_PATH = PROCESSED_DIR / "current_season_raw.csv"
 OUT_PATH = PROCESSED_DIR / "current_season_with_difficulty.csv"
-S1_BASE_URL = os.getenv("S1_BASE_URL", "").strip()
+S1_BASE_URL = os.getenv("S1_BASE_URL", "http://localhost:8002").strip()
 
 
 def load_fixtures_df():

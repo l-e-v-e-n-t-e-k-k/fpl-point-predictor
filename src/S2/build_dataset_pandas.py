@@ -14,7 +14,7 @@ PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 OUT_PATH = PROCESSED_DIR / "current_season_raw.csv"
 
 SEASON = "25-26"
-S1_BASE_URL = os.getenv("S1_BASE_URL", "").strip()
+S1_BASE_URL = os.getenv("S1_BASE_URL", "http://localhost:8002").strip()
 
 
 def load_current_season_rows():
