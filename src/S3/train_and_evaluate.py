@@ -108,6 +108,36 @@ def rolling_gw_split(df, split_ratio=0.7, logs=False):
     return train_df, test_df, split_summary
 
 
+def validate_split_order(train_df: pd.DataFrame, test_df: pd.DataFrame):
+    season_checks = []
+
+    for season in sorted(set(train_df["season"]).intersection(set(test_df["season"]))):
+        train_season = train_df[train_df["season"] == season]
+        test_season = test_df[test_df["season"] == season]
+
+        max_train_gw = int(train_season["GW"].max())
+        min_test_gw = int(test_season["GW"].min())
+        is_time_ordered = max_train_gw < min_test_gw
+
+        if not is_time_ordered:
+            raise RuntimeError(
+                f"Train/test split order check failed for season {season}: "
+                f"max_train_gw={max_train_gw}, min_test_gw={min_test_gw}"
+            )
+
+        season_checks.append({
+            "season": season,
+            "max_train_gw": max_train_gw,
+            "min_test_gw": min_test_gw,
+            "is_time_ordered": is_time_ordered,
+        })
+
+    return {
+        "is_time_ordered": True,
+        "season_checks": season_checks,
+    }
+
+
 # ---- Metrics ----
 def mae(y_true, y_pred):
     return sum(abs(a - b) for a, b in zip(y_true, y_pred)) / max(1, len(y_true))
@@ -150,13 +180,14 @@ def main(logs=True):
 
     df, dataset_metadata = load_feature_dataset()
     # ---- last gameweek drop ----
-    df = df.dropna(subset=["target_next_gw", "next_opponent_difficulty"])
+    df = df.dropna(subset=[TARGET_COL, "next_opponent_difficulty"])
 
     #df_model = df.dropna(subset=["avg_pts_last5"])
     #df_model = df_model[df_model["avg_min_last5"] >= 0.0]
 
     split_ratio = TRAIN_SPLIT_RATIO
     train_df, test_df, split_summary = rolling_gw_split(df, split_ratio=split_ratio, logs=logs)
+    split_validation = validate_split_order(train_df, test_df)
 
     X_train = train_df[FEATURE_COLS]   
     y_train = train_df[TARGET_COL]
@@ -252,6 +283,7 @@ def main(logs=True):
             "test_rows": len(test_df),
             "season_summaries": split_summary,
         },
+        "split_order_check": split_validation,
         "training_config": {
             "target_column": TARGET_COL,
             "train_split_ratio": TRAIN_SPLIT_RATIO,

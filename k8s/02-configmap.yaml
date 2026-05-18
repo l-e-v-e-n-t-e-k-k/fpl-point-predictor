@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fpl-config
+  namespace: fpl-system
+data:
+  RAW_DB_HOST: raw-postgres
+  RAW_DB_PORT: "5432"
+  FEATURE_DB_HOST: feature-postgres
+  FEATURE_DB_PORT: "5432"
+  FEATURE_TABLE_NAME: player_data
+  MODEL_BASE_DIR: /models
+  MODEL_POLL_SECONDS: "10"
+  TRAIN_SPLIT_RATIO: "0.7"
+  TRAIN_RANDOM_SEED: "42"
+  RF_N_ESTIMATORS: "300"
+  RF_MAX_DEPTH: "10"
+  RF_MIN_SAMPLES_LEAF: "5"
+  BASELINE_STRATEGY: mean
