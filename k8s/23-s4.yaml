@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: predict-api
+  namespace: fpl-system
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+  selector:
+    app: predict-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predict-api
+  namespace: fpl-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: predict-api
+  template:
+    metadata:
+      labels:
+        app: predict-api
+    spec:
+      containers:
+        - name: predict-api
+          image: ghcr.io/l-e-v-e-n-t-e-k-k/fpl-s4:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: S1_BASE_URL
+              value: http://raw-api:8002
+            - name: S2_BASE_URL
+              value: http://preprocessing:8001
+            - name: MODEL_BASE_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: fpl-config
+                  key: MODEL_BASE_DIR
+            - name: MODEL_POLL_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: fpl-config
+                  key: MODEL_POLL_SECONDS
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 700m
+              memory: 768Mi
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: model-storage-pvc

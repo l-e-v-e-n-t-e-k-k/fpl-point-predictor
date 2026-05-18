@@ -1,0 +1,164 @@
+#build_dataset_multiseason.py
+# Build a dataset for multiple seasons, by merging the previous seasons' CSVs with the current season's CSV.
+from pathlib import Path
+import pandas as pd
+import numpy as np
+from S2.features import add_rolling_features
+from shared.db.connection import feature_engine
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+RAW_DIR = PROJECT_ROOT / "data" / "raw" / "prev_seasons"
+
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+OUT_PATH = PROCESSED_DIR / "multiseason_supervised.csv"
+
+KEEP_COLS = [
+        "season",
+        "name",
+        "position",
+        "GW",
+        "minutes",
+        "total_points",
+        "expected_goals",
+        "expected_assists",
+        "expected_goals_conceded",
+        "clean_sheets",
+        "saves",
+        "bps",
+        "value",
+        "team_difficulty", # az adott csapatnak mennyire nehez a meccs
+        "opponent_difficulty", # az ellenfelnek mennyire nehez a meccs/ azaz az adott csapat mennyire jo
+        "is_home",
+        "target_next_gw"
+]
+        # "team_h_difficulty" = otthoni csapatnak mennyire nehez
+        # "team_a_difficulty" = vendeg csapatnak mennyire nehez
+
+def process_prev_season(merged_path, fixtures_path, season_name):
+
+    df = pd.read_csv(merged_path)
+    fixtures_df = pd.read_csv(fixtures_path)
+
+    # ---- Difficulty merge ----
+    df = df.merge(
+        fixtures_df[["id", "team_h_difficulty", "team_a_difficulty"]],
+        left_on="fixture",
+        right_on="id",
+        how="left"
+    )
+
+    df["team_difficulty"] = np.where(
+        df["was_home"] == True,
+        df["team_h_difficulty"],
+        df["team_a_difficulty"]
+    )
+
+    df["opponent_difficulty"] = np.where(
+        df["was_home"] == True,
+        df["team_a_difficulty"],
+        df["team_h_difficulty"]
+    )
+
+    df["season"] = season_name
+
+    df = df.drop(columns=["id", "team_h_difficulty", "team_a_difficulty"])
+
+    df = df.sort_values(["season", "name", "GW"])
+
+    df["target_next_gw"] = (
+    df.groupby(["season", "name"])["total_points"]
+      .shift(-1)
+    )
+
+    df["is_home"] = (df["was_home"]).astype(int)
+
+    df = df[KEEP_COLS]
+
+    
+    #  ---- Drop 0 minutes rows ----
+    df = df[df["minutes"] > 0]
+
+    # ---- Filter active players ----
+    #df = df.groupby("name").filter(lambda x: x["minutes"].sum() >= 300)
+    latest_season = df["season"].max()
+
+    active_players = (
+        df[df["season"] == latest_season]
+        .groupby("name")["minutes"]
+        .sum()
+    )
+
+    active_players = active_players[active_players >= 200].index
+
+    df = df[df["name"].isin(active_players)]
+
+    return df
+
+
+def build_multiseason(current_df: pd.DataFrame):
+    all_dfs = []
+
+    seasons = [
+        ("merged_gw_22-23.csv", "fixtures_22-23.csv", "22-23"),
+        ("merged_gw_23-24.csv", "fixtures_23-24.csv", "23-24"),
+        ("merged_gw_24-25.csv", "fixtures_24-25.csv", "24-25"),
+    ]
+    # ---- Merge previous seasons ----
+    for merged_file, fixtures_file, season_name in seasons:
+
+        print("Processing:", season_name)
+
+        merged_path = RAW_DIR / merged_file
+        fixtures_path = RAW_DIR / fixtures_file
+
+        df_season = process_prev_season(
+            merged_path,
+            fixtures_path,
+            season_name
+        )
+
+        all_dfs.append(df_season)
+
+    # ---- Merge with Current Season ----
+    current_df = current_df.copy()
+    current_df["is_home"] = (current_df["was_home"]).astype(int)
+
+    current_keep_cols = KEEP_COLS + [
+        "next_team_difficulty",
+        "next_opponent_difficulty",
+    ]
+    current_df = current_df[current_keep_cols]
+    all_dfs.append(current_df)
+
+    final_df = pd.concat(all_dfs, ignore_index=True)
+    final_df = add_rolling_features(final_df)
+
+    return final_df
+
+
+def save_multiseason(df: pd.DataFrame, out_path: Path = OUT_PATH):
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out_path, index=False)
+
+
+def save_multiseason_db(df: pd.DataFrame, table_name: str = "player_data"):
+    df.to_sql(
+        table_name,
+        feature_engine,
+        if_exists="replace",
+        index=False
+    )
+
+
+def main():
+    current_df = pd.read_csv(PROCESSED_DIR / "current_season_supervised.csv")
+    final_df = build_multiseason(current_df)
+    save_multiseason(final_df, OUT_PATH)
+
+    print("DONE")
+    print("Total rows:", len(final_df))
+
+    save_multiseason_db(final_df)
+    
+if __name__ == "__main__":
+    main()

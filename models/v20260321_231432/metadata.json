@@ -1,0 +1,35 @@
+{
+  "version": "v20260321_231432",
+  "created_at": "2026-03-21T23:14:33.744401+00:00",
+  "best_model_name": "rf",
+  "model_type": "RandomForestRegressor",
+  "feature_cols": [
+    "avg_pts_last3",
+    "avg_min_last3",
+    "avg_pts_last5",
+    "avg_min_last5",
+    "expected_goals",
+    "expected_assists",
+    "avg_xgi_last5",
+    "expected_goals_conceded",
+    "clean_sheets_last5",
+    "saves",
+    "bps",
+    "next_team_difficulty",
+    "next_opponent_difficulty"
+  ],
+  "metrics": {
+    "lr": {
+      "mae": 1.673511557223902,
+      "rmse": 2.5261943396033066
+    },
+    "rf": {
+      "mae": 1.6069350530896611,
+      "rmse": 2.502883431115822
+    },
+    "baseline": {
+      "mae": 1.9466038423969767,
+      "rmse": 2.8238048527940416
+    }
+  }
+}

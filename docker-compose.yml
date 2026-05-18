@@ -1,0 +1,103 @@
+services:
+  raw-postgres:
+    image: postgres:15
+    container_name: fpl_raw_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: mluser
+      POSTGRES_PASSWORD: mlpass
+      POSTGRES_DB: rawdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - raw_postgres_data:/var/lib/postgresql/data
+
+  feature-postgres:
+    image: postgres:15
+    container_name: fpl_feature_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: mluser
+      POSTGRES_PASSWORD: mlpass
+      POSTGRES_DB: featuredb
+    ports:
+      - "5433:5432"
+    volumes:
+      - feature_postgres_data:/var/lib/postgresql/data
+
+  raw-api:
+    build:
+      context: .
+      dockerfile: src/S1/Dockerfile
+    container_name: fpl_raw_api
+    restart: unless-stopped
+    depends_on:
+      - raw-postgres
+    ports:
+      - "8002:8002"
+    environment:
+      S1_DATABASE_URL: postgresql://mluser:mlpass@raw-postgres:5432/rawdb
+
+  preprocessing:
+    build:
+      context: .
+      dockerfile: src/S2/Dockerfile
+    container_name: fpl_preprocessing
+    restart: unless-stopped
+    depends_on:
+      - raw-postgres
+      - feature-postgres
+      - raw-api
+    ports:
+      - "8001:8001"
+    environment:
+      S2_DATABASE_URL: postgresql://mluser:mlpass@feature-postgres:5432/featuredb
+      S1_BASE_URL: http://raw-api:8002
+      FEATURE_TABLE_NAME: player_data
+
+  trainer:
+    build:
+      context: .
+      dockerfile: src/S3/Dockerfile
+    container_name: fpl_trainer
+    profiles:
+      - trainer
+    depends_on:
+      - feature-postgres
+      - preprocessing
+    environment:
+      S2_BASE_URL: http://preprocessing:8001
+      MODEL_BASE_DIR: /models
+      TRAIN_SPLIT_RATIO: 0.7
+      TRAIN_RANDOM_SEED: 42
+      RF_N_ESTIMATORS: 300
+      RF_MAX_DEPTH: 10
+      RF_MIN_SAMPLES_LEAF: 5
+      BASELINE_STRATEGY: mean
+    volumes:
+      - ./models:/models
+
+  predict-api:
+    build:
+      context: .
+      dockerfile: src/S4/Dockerfile
+    container_name: fpl_api
+    restart: unless-stopped
+    depends_on:
+      - raw-postgres
+      - feature-postgres
+      - raw-api
+      - preprocessing
+    ports:
+      - "8000:8000"
+    environment:
+      S1_BASE_URL: http://raw-api:8002
+      S2_BASE_URL: http://preprocessing:8001
+      MODEL_BASE_DIR: /models
+      MODEL_POLL_SECONDS: 10
+    volumes:
+      - ./models:/models
+
+volumes:
+  raw_postgres_data:
+  feature_postgres_data:

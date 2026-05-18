@@ -1,0 +1,69 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: trainer
+  namespace: fpl-system
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: trainer
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: ghcr.io/l-e-v-e-n-t-e-k-k/fpl-s3:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: S2_BASE_URL
+              value: http://preprocessing:8001
+            - name: MODEL_BASE_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: fpl-config
+                  key: MODEL_BASE_DIR
+            - name: TRAIN_SPLIT_RATIO
+              valueFrom:
+                configMapKeyRef:
+                  name: fpl-config
+                  key: TRAIN_SPLIT_RATIO
+            - name: TRAIN_RANDOM_SEED
+              valueFrom:
+                configMapKeyRef:
+                  name: fpl-config
+                  key: TRAIN_RANDOM_SEED
+            - name: RF_N_ESTIMATORS
+              valueFrom:
+                configMapKeyRef:
+                  name: fpl-config
+                  key: RF_N_ESTIMATORS
+            - name: RF_MAX_DEPTH
+              valueFrom:
+                configMapKeyRef:
+                  name: fpl-config
+                  key: RF_MAX_DEPTH
+            - name: RF_MIN_SAMPLES_LEAF
+              valueFrom:
+                configMapKeyRef:
+                  name: fpl-config
+                  key: RF_MIN_SAMPLES_LEAF
+            - name: BASELINE_STRATEGY
+              valueFrom:
+                configMapKeyRef:
+                  name: fpl-config
+                  key: BASELINE_STRATEGY
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: model-storage-pvc

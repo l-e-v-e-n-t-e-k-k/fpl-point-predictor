@@ -1,0 +1,37 @@
+flowchart LR
+ %% External
+    ext["External FPL API"]
+
+    %% Services
+    s1["S1 Ingestion Service<br/>online, stateless"]
+    s2["S2 Feature Service<br/>online, stateless"]
+    s3["S3 Training Job<br/>batch, stateless"]
+    s4["S4 Predikciós API<br/>online, stateless"]
+
+    %% Databases
+    rawdb[(S1 Raw DB)]
+    featuredb[(S2 Feature DB)]
+    models[(Model Artifacts)]
+
+    %% Client
+    client["Client"]
+
+    %% Ingestion
+    s1 -->|fetch raw data| ext
+    s1 <--> rawdb
+
+    %% Feature service
+    s2 -->|HTTP: fetch raw data| s1
+    s2 <--> featuredb
+
+    %% Training
+    s3 -->|HTTP: fetch dataset| s2
+    s3 -->|save model| models
+
+    %% Prediction
+    s4 -->|load model| models
+    s4 -->|HTTP: get features| s2
+    s4 -->|HTTP: get metadata| s1
+
+    %% Client
+    client -->|prediction request| s4
